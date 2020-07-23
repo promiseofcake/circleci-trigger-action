@@ -19,9 +19,9 @@ async function run() {
 
     let headers = {
       headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          "Circle-Token": token,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        "Circle-Token": token,
       }
     };
 
@@ -33,14 +33,15 @@ async function run() {
 
     axios.post(url, requestPayload, headers)
     .then((res) => {
-      console.log("RESPONSE: ", res);
+      console.log("Response: ", res);
     })
     .catch((err) => {
-      console.log("ERROR: ", err);
+      console.log("HTTP Error: ", err);
       core.setFailed(err.message);
     })
 
   } catch (error) {
+    console.log("Error: ", error);
     core.setFailed(error.message);
   }
 }
