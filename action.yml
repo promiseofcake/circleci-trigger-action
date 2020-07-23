@@ -1,13 +1,23 @@
-name: 'Wait'
-description: 'Wait a designated number of milliseconds'
+name: 'Your name here'
+description: 'Provide a description here'
+author: 'Your name or organization here'
 inputs:
-  milliseconds:  # id of input
-    description: 'number of milliseconds to wait'
+  repository:
+    description: 'repository name ex: promiseofcake/actionlet'
     required: true
-    default: '1000'
-outputs:
-  time: # output will be available to future steps
-    description: 'The message to output'
+  platform:
+    description: 'scm platform, ex gh for github'
+    required: true
+    default: 'gh'
+  token:
+    description: 'user token for circleci'
+    required: true
+  branch:
+    description: 'branch to send to circleci'
+    required: true
+  payload:
+    description: 'data to send to circleci in JSON format'
+    required: true
 runs:
   using: 'node12'
   main: 'dist/index.js'
