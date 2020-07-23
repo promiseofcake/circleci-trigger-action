@@ -37,7 +37,7 @@ async function run() {
     })
     .catch((err) => {
       console.log("ERROR: ", err);
-      throw err;
+      core.setFailed(err.message);
     })
 
   } catch (error) {
