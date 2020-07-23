@@ -1,0 +1,19 @@
+version: 2.1
+
+parameters:
+  run_output_workflow:
+    type: boolean
+    default: false
+
+jobs:
+  output:
+    docker:
+      - image: cimg/base:2020.01
+    steps:
+      - run: echo "this is an output build"
+
+workflows:
+  output:
+    when: << pipeline.parameters.run_output_workflow >>
+    jobs:
+      - output
