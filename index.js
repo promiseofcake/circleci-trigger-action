@@ -4,11 +4,10 @@ const util = require('util');
 
 async function run() {
   try {
+    const userToken = core.getInput('user-token');
+    const projectSlug = core.getInput('project-slug');
     const branch = core.getInput('branch');
     const payload = core.getInput('payload');
-    const platform = core.getInput('platform');
-    const repository = core.getInput('repository');
-    const token = core.getInput('token');
 
     const jsonObj = JSON.parse(payload)
 
@@ -21,14 +20,13 @@ async function run() {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        "Circle-Token": token,
+        "Circle-Token": userToken,
       }
     };
 
     let url = util.format(
-      'https://circleci.com/api/v2/project/%s/%s/pipeline',
-      platform,
-      repository
+      'https://circleci.com/api/v2/project/gh/%s/pipeline',
+      projectSlug
     );
 
     axios.post(url, requestPayload, headers)

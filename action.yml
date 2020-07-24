@@ -2,14 +2,10 @@ name: 'Your name here'
 description: 'Provide a description here'
 author: 'Your name or organization here'
 inputs:
-  repository:
-    description: 'repository name ex: promiseofcake/actionlet'
+  project-slug:
+    description: 'CircleCI project slug, ie. the repo name: promiseofcake/circleci-trigger-action'
     required: true
-  platform:
-    description: 'scm platform, ex gh for github'
-    required: true
-    default: 'gh'
-  token:
+  user-token:
     description: 'user token for circleci'
     required: true
   branch:
