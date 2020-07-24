@@ -1,18 +1,18 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'CircleCI Workflow API Trigger'
+description: 'Action to send API calls to CircleCI to trigger parameterized workflow runs.'
+author: 'promiseofcake'
 inputs:
   project-slug:
     description: 'CircleCI project slug, ie. the repo name: promiseofcake/circleci-trigger-action'
     required: true
   user-token:
-    description: 'user token for circleci'
+    description: 'CircleCI User Token used to authorize the workflow run'
     required: true
   branch:
-    description: 'branch to send to circleci'
+    description: 'Branch for the CircleCU contextual run.'
     required: true
   payload:
-    description: 'data to send to circleci in JSON format'
+    description: 'Payload data (JSON) to send to the Workflow endpoint'
     required: true
 runs:
   using: 'node12'
