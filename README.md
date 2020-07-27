@@ -1,48 +1,62 @@
 # promiseofcake/circleci-trigger-action
 
-Github Action to trigger workflow runs in CircleCi
+Github Action to trigger workflow runs via [API call in CircleCi](https://circleci.com/docs/api/v2/#get-a-pipeline-39-s-workflows).
 
-## Code in Main
+## Use-case
 
-Install the dependencies
+This action is for a very niche-audience, individuals who are running workflows
+in CircleCI but need to perform manual runs outside the scope of the provided /
+avaialble CircleCI triggering mechanisms.
 
-```bash
-npm install
+One may ask, why would I use CircleCi if I am also using Github Actions? This
+action does not aim to answer that question, but if you happen to be working in
+that paradigm, hopefuly it will be of use to you.
+
+## Usage
+
+Requirements:
+
+- CircleCI User API Token
+- CircleCI Configured Parameterized Workflow
+
+See the sample Action config:
+
+```yaml
+name: Execute CircleCI Workflow
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CircleCI build-beta workflow.
+        uses: promiseofcake/circleci-trigger-action@v1
+        with:
+          user-token: ${{ secrets.CIRCLECI_TOKEN }}
+          project-slug: promiseofcake/circleci-trigger-action
+          branch: ${GITHUB_REF#refs/heads/}
+          payload: '{"run_output_workflow": true}'
 ```
 
-## Package for distribution
+For utility, see a sample CircleCI config (for the other side of this transaction)
 
-GitHub Actions will run the entry point from the action.yml. Packaging assembles the code into one file that can be checked in to Git, enabling fast and reliable execution and preventing the need to check in node_modules.
+```yaml
+version: 2.1
 
-Actions are run from GitHub repos.  Packaging the action will create a packaged action in the dist folder.
+parameters:
+  run_output_workflow:
+    type: boolean
+    default: false
 
-Run prepare
+jobs:
+  output:
+    docker:
+      - image: cimg/base:2020.01
+    steps:
+      - run: echo "this is an output build"
 
-```bash
-npm run prepare
+workflows:
+  output:
+    when: << pipeline.parameters.run_output_workflow >>
+    jobs:
+      - output
 ```
-
-Since the packaged index.js is run from the dist folder.
-
-```bash
-git add dist
-```
-
-## Create a release branch
-
-Users shouldn't consume the action from master since that would be latest code and actions can break compatibility between major versions.
-
-Checkin to the v1 release branch
-
-```bash
-git checkout -b v1
-git commit -a -m "v1 release"
-```
-
-```bash
-git push origin v1
-```
-
-Your action is now published! :rocket:
-
-See the [versioning documentation](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
