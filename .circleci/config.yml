@@ -4,13 +4,16 @@ parameters:
   run_output_workflow:
     type: boolean
     default: false
+  output_value:
+    type: string
+    default: default output value
 
 jobs:
   output:
     docker:
       - image: cimg/base:2020.01
     steps:
-      - run: echo "this is an output build"
+      - run: "echo this is an output build, the output_value is: << pipeline.parameters.output_value >>"
 
 workflows:
   output:
