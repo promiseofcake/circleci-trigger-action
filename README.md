@@ -28,12 +28,11 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
       - uses: promiseofcake/circleci-trigger-action@v1
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: promiseofcake/circleci-trigger-action
-          branch: ${{ env.BRANCH_NAME }}
+          branch: ${{ github.head_ref }}
           payload: '{"run_output_workflow": true}'
 ```
 

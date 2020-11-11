@@ -13,6 +13,8 @@ jobs:
     env:
         OUTPUT_VALUE: overloaded output value
     steps:
+    - run: echo 'BRANCH_NAME=$(echo ${{ github.head_ref || github.ref }} | sed -E "s/refs\/(heads|tags)\///")' >> $GITHUB_ENV
+    - run: echo ${{ env.BRANCH_NAME }}
     - uses: actions/checkout@v2
     - uses: ./
       with:
