@@ -14,11 +14,9 @@ jobs:
         OUTPUT_VALUE: overloaded output value
     steps:
     - uses: actions/checkout@v2
-    - run: echo ${{ toJson(github) }}
-    - run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
     - uses: ./
       with:
         project-slug: ${{ github.repository }}
         user-token: ${{ secrets.CIRCLECI_TOKEN }}
-        branch: ${{ env.BRANCH_NAME }}
-        payload: '{"run_output_workflow": true, "triggering_branch": "${{ env.BRANCH_NAME }}", "output_value": "${{ env.OUTPUT_VALUE }}"}'
+        branch: ${{ github.head_ref }}
+        payload: '{"run_output_workflow": true, "triggering_branch": "${{ github.head_ref }}", "output_value": "${{ env.OUTPUT_VALUE }}"}'
