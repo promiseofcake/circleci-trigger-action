@@ -28,12 +28,12 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger CircleCI build-beta workflow.
+      - run: echo "::set-env name=BRANCH_NAME::${GITHUB_REF#refs/heads/}"
         uses: promiseofcake/circleci-trigger-action@v1
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: promiseofcake/circleci-trigger-action
-          branch: ${GITHUB_REF#refs/heads/}
+          branch: ${{ env.BRANCH_NAME }}
           payload: '{"run_output_workflow": true}'
 ```
 
