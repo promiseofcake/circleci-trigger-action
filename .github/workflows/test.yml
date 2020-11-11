@@ -14,6 +14,7 @@ jobs:
         OUTPUT_VALUE: overloaded output value
     steps:
     - uses: actions/checkout@v2
+    - run: echo ${{ toJson(github) }}
     - run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
     - uses: ./
       with:
