@@ -28,8 +28,8 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "::set-env name=BRANCH_NAME::${GITHUB_REF#refs/heads/}"
-        uses: promiseofcake/circleci-trigger-action@v1
+      - run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+      - uses: promiseofcake/circleci-trigger-action@v1
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: promiseofcake/circleci-trigger-action
