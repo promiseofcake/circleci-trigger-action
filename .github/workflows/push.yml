@@ -1,6 +1,5 @@
 name: "units-test"
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -14,9 +13,11 @@ jobs:
         OUTPUT_VALUE: overloaded output value
     steps:
     - uses: actions/checkout@v2
+    - name: Capture triggering branch name
+      run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
     - uses: ./
       with:
         project-slug: ${{ github.repository }}
         user-token: ${{ secrets.CIRCLECI_TOKEN }}
-        branch: ${{ github.ref }}
+        branch: ${{ env.BRANCH_NAME }}
         payload: '{"run_output_workflow": true, "output_value": "${{ env.OUTPUT_VALUE }}"}'

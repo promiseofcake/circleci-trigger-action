@@ -12,6 +12,15 @@ One may ask, why would I use CircleCi if I am also using Github Actions? This
 action does not aim to answer that question, but if you happen to be working in
 that paradigm, hopefuly it will be of use to you.
 
+The main use case is:
+
+* I have enabled "Only build Pull Requests" in CircleCI
+* I want to trigger builds on pushes to non-main/master branches
+
+### Caveat
+
+Since CircleCi alraedy allows individuals to trigger builds on pushes in a pull request context, this action isn't strictly designed for that. If for some reason you want to do that, you will need to do the parsing and groking of the branch name yourself from the [Github Context](https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#github-context) as opposed to following the example below.
+
 ## Usage
 
 Requirements:
@@ -28,12 +37,14 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     steps:
+      - name: Capture triggering branch name
+        run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
       - name: Trigger CircleCI build-beta workflow.
         uses: promiseofcake/circleci-trigger-action@v1
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: promiseofcake/circleci-trigger-action
-          branch: ${GITHUB_REF#refs/heads/}
+          branch: ${{ env.BRANCH_NAME }}
           payload: '{"run_output_workflow": true}'
 ```
 
