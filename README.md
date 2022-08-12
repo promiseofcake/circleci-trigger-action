@@ -61,7 +61,7 @@ parameters:
 jobs:
   output:
     docker:
-      - image: cimg/base:2020.01
+      - image: cimg/base:2022.08
     steps:
       - run: echo "this is an output build"
 
