@@ -5,15 +5,18 @@ inputs:
   project-slug:
     description: 'CircleCI project slug, ie. the repo name: promiseofcake/circleci-trigger-action'
     required: true
+    default: ${{ github.repository }}
   user-token:
     description: 'CircleCI User Token used to authorize the workflow run'
     required: true
   branch:
     description: 'Branch for the CircleCU contextual run.'
     required: true
+    default: ${{ github.head_ref }}
   payload:
     description: 'Payload data (JSON) to send to the Workflow endpoint'
     required: true
+    default: '{}'
 runs:
-  using: 'node12'
+  using: 'node16'
   main: 'dist/index.js'
