@@ -30,13 +30,13 @@ async function run() {
     );
 
     axios.post(url, requestPayload, headers)
-    .then((res) => {
-      console.log("Response: ", res);
-    })
-    .catch((err) => {
-      console.log("HTTP Error: ", err);
-      core.setFailed(err.message);
-    })
+      .then((res) => {
+        console.log("Response: ", res);
+      })
+      .catch((err) => {
+        console.log("HTTP Error: ", err);
+        core.setFailed(err.message);
+      })
 
   } catch (error) {
     console.log("Error: ", error);

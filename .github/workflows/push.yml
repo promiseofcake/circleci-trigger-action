@@ -12,7 +12,7 @@ jobs:
     env:
         OUTPUT_VALUE: overloaded output value
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Capture triggering branch name
       run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
     - uses: ./
