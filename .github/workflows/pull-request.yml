@@ -1,10 +1,9 @@
-name: "units-test"
+name: "unit-test"
 on:
   pull_request:
 
 jobs:
-  # compile
-  units:
+  unit:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
