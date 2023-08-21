@@ -25,8 +25,8 @@ Since CircleCi alraedy allows individuals to trigger builds on pushes in a pull 
 
 Requirements:
 
-- CircleCI User API Token
-- CircleCI Configured Parameterized Workflow
+* CircleCI User API Token
+* CircleCI Configured Parameterized Workflow
 
 See the sample Action config:
 
@@ -61,7 +61,7 @@ parameters:
 jobs:
   output:
     docker:
-      - image: cimg/base:2022.08
+      - image: cimg/base:2023.08
     steps:
       - run: echo "this is an output build"
 
