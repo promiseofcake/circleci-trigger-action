@@ -35,8 +35,6 @@ jobs:
           if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
             git add .
             git status
-            cat <<EOF | git commit -F - || true
-            /dist updated by GitHub
-            EOF
+            git commit -m "/dist updated by GitHub"
             git push
           fi
