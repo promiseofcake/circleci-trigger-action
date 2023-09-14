@@ -11,4 +11,5 @@ jobs:
       with:
         bun-version: latest
     - run: bun install
-    - run: bun test
+    - run: eslint .
+    - run: jest
