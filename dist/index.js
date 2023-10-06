@@ -10658,7 +10658,7 @@ async function run() {
 
     axios.post(url, requestPayload, headers)
       .then((res) => {
-        console.log("Response: ", res);
+        console.log("Response: ", res.status);
       })
       .catch((err) => {
         console.log("HTTP Error: ", err);
