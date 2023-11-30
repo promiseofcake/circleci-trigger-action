@@ -18,6 +18,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.COMMIT_PAT }}
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: setup git config
+        run: |
+          git config user.name "Lucas Kacher"
+          git config user.email "<lucaskacher@gmail.com>"
       - name: Set Node.js 16.x
         uses: actions/setup-node@v4.0.0
         with:
@@ -29,14 +37,9 @@ jobs:
       - name: Compare the expected and actual dist/ directories
         run: |
           if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
-            echo "Detected uncommitted changes after build.  See status below:"
+            git add .
             git diff
-            exit 1
+            git commit -m "rebuild dist"
+            git push
           fi
         id: diff
-      # If index.js was different than expected, upload the expected version as an artifact
-      - uses: actions/upload-artifact@v3
-        if: ${{ failure() && steps.diff.conclusion == 'failure' }}
-        with:
-          name: dist
-          path: dist/
