@@ -27,7 +27,7 @@ jobs:
           git config user.name "Lucas Kacher"
           git config user.email "<lucaskacher@gmail.com>"
       - name: Set Node.js 16.x
-        uses: actions/setup-node@v4.0.0
+        uses: actions/setup-node@v4.0.1
         with:
           node-version: 16.x
       - name: Install dependencies
