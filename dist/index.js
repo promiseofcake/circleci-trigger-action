@@ -35861,10 +35861,21 @@ async function run() {
     const branch = core.getInput('branch');
     const payload = core.getInput('payload');
 
-    const jsonObj = JSON.parse(payload)
+    const jsonObj = JSON.parse(payload);
 
+    // Parse the project slug to extract organization and project (GitHub only)
+    const slugParts = projectSlug.split('/');
+    if (slugParts.length !== 2) {
+      throw new Error(`Invalid project slug format: ${projectSlug}. Expected format: org-name/repo-name`);
+    }
+
+    const [organization, project] = slugParts;
+
+    // New API request payload structure
     var requestPayload = {
-      branch: branch,
+      config: {
+        branch: branch
+      },
       parameters: jsonObj
     };
 
@@ -35876,22 +35887,27 @@ async function run() {
       }
     };
 
+    // Use the new API endpoint format (GitHub only)
     let url = util.format(
-      'https://circleci.com/api/v2/project/gh/%s/pipeline',
-      projectSlug
+      'https://circleci.com/api/v2/project/github/%s/%s/pipeline/run',
+      organization,
+      project
     );
+
+    console.log(`Triggering pipeline for github/${organization}/${project} on branch ${branch}`);
 
     axios.post(url, requestPayload, headers)
       .then((res) => {
         console.log("Response: ", res.status);
+        console.log("Response data: ", res.data);
       })
       .catch((err) => {
-        console.log("HTTP Error: ", err);
+        console.log("HTTP Error: ", err.response?.data || err.message);
         core.setFailed(err.message);
       })
 
   } catch (error) {
-    console.log("Error: ", error);
+    console.log("Error: ", error.message);
     core.setFailed(error.message);
   }
 }
