@@ -11,7 +11,7 @@ parameters:
 jobs:
   output:
     docker:
-      - image: cimg/base:2023.08
+      - image: cimg/base:2025.07
     steps:
       - run: "echo this is an output build, the output_value is: << pipeline.parameters.output_value >>"
 
