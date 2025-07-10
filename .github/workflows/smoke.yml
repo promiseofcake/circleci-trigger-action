@@ -19,4 +19,5 @@ jobs:
         user-token: ${{ secrets.CIRCLECI_TOKEN }}
         project-slug: ${{ github.repository }}
         branch: ${{ env.BRANCH_NAME }}
+        definition-id: ${{ secrets.CIRCLECI_DEFINITION_ID }}
         payload: '{"run_output_workflow": true, "output_value": "${{ env.OUTPUT_VALUE }}"}'

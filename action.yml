@@ -13,6 +13,9 @@ inputs:
     description: 'Branch for the CircleCI contextual run.'
     required: true
     default: ${{ github.head_ref }}
+  definition-id:
+    description: 'Pipeline definition ID for the CircleCI pipeline'
+    required: true
   payload:
     description: 'Payload data (JSON) to send to the Workflow endpoint'
     required: true

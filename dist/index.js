@@ -35859,6 +35859,7 @@ async function run() {
     const userToken = core.getInput('user-token');
     const projectSlug = core.getInput('project-slug');
     const branch = core.getInput('branch');
+    const definitionId = core.getInput('definition-id');
     const payload = core.getInput('payload');
 
     const jsonObj = JSON.parse(payload);
@@ -35873,6 +35874,7 @@ async function run() {
 
     // New API request payload structure
     const requestPayload = {
+      definition_id: definitionId,
       config: {
         branch: branch
       },
@@ -35889,7 +35891,7 @@ async function run() {
 
     // Use the new API endpoint format (GitHub only)
     let url = util.format(
-      'https://circleci.com/api/v2/project/github/%s/%s/pipeline/run',
+      'https://circleci.com/api/v2/project/gh/%s/%s/pipeline/run',
       organization,
       project
     );

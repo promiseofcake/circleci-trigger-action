@@ -27,6 +27,7 @@ Requirements:
 
 * CircleCI User API Token (exposed as GitHub secret)
 * CircleCI Configured Parameterized Workflow (configured on CircleCI)
+* CircleCI Pipeline Definition ID (found in Project Settings > Pipelines)
 
 See the sample Action config:
 
@@ -48,6 +49,7 @@ jobs:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: promiseofcake/circleci-trigger-action
           branch: ${{ env.BRANCH_NAME }}
+          definition-id: ${{ secrets.CIRCLECI_DEFINITION_ID }}
           payload: '{"run_output_workflow": true}'
 ```
 
