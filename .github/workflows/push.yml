@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - 'releases/*'
+      - 'v*'
 
 jobs:
   integration:
@@ -19,4 +19,5 @@ jobs:
         project-slug: ${{ github.repository }}
         user-token: ${{ secrets.CIRCLECI_TOKEN }}
         branch: ${{ env.BRANCH_NAME }}
+        definition-id: ${{ secrets.CIRCLECI_DEFINITION_ID }}
         payload: '{"run_output_workflow": true, "output_value": "${{ env.OUTPUT_VALUE }}"}'
