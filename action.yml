@@ -14,7 +14,7 @@ inputs:
     required: true
     default: ${{ github.head_ref }}
   definition-id:
-    description: 'Pipeline definition ID for the CircleCI pipeline'
+    description: 'Pipeline definition ID for the CircleCI pipeline to trigger'
     required: true
   payload:
     description: 'Payload data (JSON) to send to the Workflow endpoint'

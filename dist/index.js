@@ -35878,6 +35878,9 @@ async function run() {
       config: {
         branch: branch
       },
+      checkout: {
+        branch: branch
+      },
       parameters: jsonObj
     };
 
