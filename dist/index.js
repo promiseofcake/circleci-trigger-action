@@ -35872,7 +35872,7 @@ async function run() {
     const [organization, project] = slugParts;
 
     // New API request payload structure
-    var requestPayload = {
+    const requestPayload = {
       config: {
         branch: branch
       },
