@@ -1,0 +1,17 @@
+{
+  "minimal": {},
+  "basic": {
+    "run_workflow": true
+  },
+  "complex": {
+    "run_output_workflow": true,
+    "environment": "production",
+    "version": "1.2.3",
+    "deploy_target": "staging"
+  },
+  "with_special_chars": {
+    "message": "Deploy feature/user-auth-improvements",
+    "author": "John Doe <john@example.com>",
+    "run_tests": true
+  }
+}

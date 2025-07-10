@@ -31,7 +31,7 @@ async function run() {
       parameters: jsonObj
     };
 
-    let headers = {
+    const headers = {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -40,24 +40,32 @@ async function run() {
     };
 
     // Use the new API endpoint format (GitHub only)
-    let url = `https://circleci.com/api/v2/project/gh/${organization}/${project}/pipeline/run`;
+    const url = `https://circleci.com/api/v2/project/gh/${organization}/${project}/pipeline/run`;
 
     console.log(`Triggering pipeline for github/${organization}/${project} on branch ${branch}`);
 
-    axios.post(url, requestPayload, headers)
-      .then((res) => {
-        console.log("Response: ", res.status);
-        console.log("Response data: ", res.data);
-      })
-      .catch((err) => {
-        console.log("HTTP Error: ", err.response?.data || err.message);
-        core.setFailed(err.message);
-      })
+    const response = await axios.post(url, requestPayload, headers);
+    console.log("Response: ", response.status);
+    console.log("Response data: ", response.data);
+    return response;
 
   } catch (error) {
-    console.log("Error: ", error.message);
+    if (error.response) {
+      // HTTP error from axios
+      console.log("HTTP Error: ", error.response?.data || error.message);
+    } else {
+      // Other error (JSON parsing, validation, etc.)
+      console.log("Error: ", error.message);
+    }
     core.setFailed(error.message);
+    throw error;
   }
 }
 
-run();
+// Export the run function for testing
+module.exports = { run };
+
+// Only run if this file is executed directly (not imported)
+if (require.main === module) {
+  run();
+}

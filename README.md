@@ -1,6 +1,6 @@
 # promiseofcake/circleci-trigger-action
 
-Github Action to trigger workflow runs via [API call in CircleCI](https://circleci.com/docs/api/v2/#get-a-pipeline-39-s-workflows).
+Github Action to trigger workflow runs via [Trigger a new pipeline API call in CircleCI](https://circleci.com/docs/api/v2/index.html#tag/Pipeline/operation/triggerPipelineRun).
 
 ## Use-case
 
@@ -8,18 +8,24 @@ This action is for a very niche-audience, individuals who are running workflows
 in CircleCI but need to perform manual runs outside the scope of the provided /
 avaialble CircleCI triggering mechanisms.
 
+One example would be to kick off a release process on a release branch, or re-run a given
+job or pipeline on demand.
+
 One may ask, why would I use CircleCI if I am also using Github Actions? This
 action does not aim to answer that question, but if you happen to be working in
 that paradigm, hopefuly it will be of use to you.
 
 The main use cases are:
 
-1. I have enabled "Only build Pull Requests" in CircleCI and I want to trigger builds on pushes to non-main/master branches
+1. I have enabled "Only build Pull Requests" in CircleCI and I want to trigger builds on pushes to non-main branches
 2. I need some way to manually kick-off a job on a given branch in CircleCI.
 
 ### Caveat
 
-Since CircleCI already allows individuals to trigger builds on pushes in a pull request context, this action isn't strictly designed for that. If for some reason you want to do that, you will need to do the parsing and groking of the branch name yourself from the [Github Context](https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#github-context) as opposed to following the example below.
+Since CircleCI already allows individuals to trigger builds on pushes in a pull request context, this action isn't strictly designed for that.
+If for some reason you want to do that, you will need to do the parsing and groking of the branch name yourself from the
+[Github Context](https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#github-context)
+as opposed to following the example below.
 
 ## Usage
 
@@ -27,7 +33,7 @@ Requirements:
 
 * CircleCI User API Token (exposed as GitHub secret)
 * CircleCI Configured Parameterized Workflow (configured on CircleCI)
-* CircleCI Pipeline Definition ID (found in Project Settings > Pipelines)
+* CircleCI Pipeline Definition ID (found in CircleCI Project Settings > Pipelines)
 
 See the sample Action config:
 
