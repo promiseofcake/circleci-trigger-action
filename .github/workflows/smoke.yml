@@ -14,7 +14,7 @@ jobs:
     steps:
     - name: Capture triggering branch name
       run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-    - uses: promiseofcake/circleci-trigger-action@v1
+    - uses: promiseofcake/circleci-trigger-action@v2
       with:
         user-token: ${{ secrets.CIRCLECI_TOKEN }}
         project-slug: ${{ github.repository }}
