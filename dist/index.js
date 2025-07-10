@@ -35852,7 +35852,6 @@ module.exports = /*#__PURE__*/JSON.parse('{"application/1d-interleaved-parityfec
 var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const axios = __nccwpck_require__(7269);
-const util = __nccwpck_require__(9023);
 
 async function run() {
   try {
@@ -35893,11 +35892,7 @@ async function run() {
     };
 
     // Use the new API endpoint format (GitHub only)
-    let url = util.format(
-      'https://circleci.com/api/v2/project/gh/%s/%s/pipeline/run',
-      organization,
-      project
-    );
+    let url = `https://circleci.com/api/v2/project/gh/${organization}/${project}/pipeline/run`;
 
     console.log(`Triggering pipeline for github/${organization}/${project} on branch ${branch}`);
 
