@@ -1,5 +1,6 @@
 name: "smoke-test"
 on:
+  pull_request:
   push:
     branches:
       - main
