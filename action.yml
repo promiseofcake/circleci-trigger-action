@@ -1,18 +1,21 @@
 name: 'CircleCI Workflow API Trigger'
-description: 'Action to send API calls to CircleCI to trigger parameterized workflow runs.'
+description: 'GitHub Action to trigger CircleCI pipelines using the new API v2 endpoint.'
 author: 'promiseofcake'
 inputs:
   project-slug:
-    description: 'CircleCI project slug, ie. the repo name: promiseofcake/circleci-trigger-action'
+    description: 'GitHub repository name in format: org-name/repo-name (e.g., promiseofcake/circleci-trigger-action)'
     required: true
     default: ${{ github.repository }}
   user-token:
     description: 'CircleCI User Token used to authorize the workflow run'
     required: true
   branch:
-    description: 'Branch for the CircleCU contextual run.'
+    description: 'Branch for the CircleCI contextual run.'
     required: true
     default: ${{ github.head_ref }}
+  definition-id:
+    description: 'Pipeline definition ID for the CircleCI pipeline to trigger'
+    required: true
   payload:
     description: 'Payload data (JSON) to send to the Workflow endpoint'
     required: true
