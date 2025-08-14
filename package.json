@@ -1,7 +1,7 @@
 {
-  "name": "javascript-action",
-  "version": "1.0.0",
-  "description": "JavaScript Action Template",
+  "name": "circleci-trigger-action",
+  "version": "2.0.0",
+  "description": "GitHub Action to trigger CircleCI pipelines with custom parameters",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
@@ -11,19 +11,22 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/actions/javascript-action.git"
+    "url": "git+https://github.com/promiseofcake/circleci-trigger-action.git"
   },
   "keywords": [
     "GitHub",
     "Actions",
-    "JavaScript"
+    "JavaScript",
+    "CircleCI",
+    "CI",
+    "pipeline"
   ],
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/actions/javascript-action/issues"
+    "url": "https://github.com/promiseofcake/circleci-trigger-action/issues"
   },
-  "homepage": "https://github.com/actions/javascript-action#readme",
+  "homepage": "https://github.com/promiseofcake/circleci-trigger-action#readme",
   "dependencies": {
     "@actions/core": "^1.10.1",
     "axios": "^1.5.1",
