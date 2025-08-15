@@ -1,29 +1,16 @@
-name: Update release tags (v1/v2)
+name: Update release tags (SemVer majors)
 
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to point v<MAJOR> to (e.g., v1.2.3 or 2.3.4)'
-        required: false
-      floating_tag:
-        description: 'Override floating tag name (default v<MAJOR>), e.g., v1-ghost or v2-ghost'
-        required: false
-      create_if_missing:
-        description: 'If true and the source tag does not exist, create it at HEAD (for testing)'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
 
 jobs:
   update-floating:
-    # Allow manual runs; skip prereleases on release event
-    if: ${{ github.event_name != 'release' || !github.event.release.prerelease }}
+    # Only run for actual published releases (not drafts/prereleases)
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease && !github.event.release.draft }}
     runs-on: ubuntu-latest
 
     steps:
@@ -42,26 +29,15 @@ jobs:
 
       - name: Update floating v<MAJOR> tag to this release
         env:
-          INPUT_TAG: ${{ inputs.tag }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-          INPUT_FLOATING: ${{ inputs.floating_tag }}
-          CREATE_IF_MISSING: ${{ inputs.create_if_missing }}
         run: |
           set -euo pipefail
 
-          # Prefer release tag; fallback to workflow_dispatch input
-          TAG="${RELEASE_TAG:-${INPUT_TAG:-}}"
-
-          # Optionally auto-detect latest stable v2.* then v1.* if no TAG provided
-          if [[ -z "${TAG}" ]]; then
-            TAG="$(git tag -l 'v2.*' --sort=-v:refname | head -n 1 || true)"
-            if [[ -z "${TAG}" ]]; then
-              TAG="$(git tag -l 'v1.*' --sort=-v:refname | head -n 1 || true)"
-            fi
-          fi
+          # Use the published release tag
+          TAG="${RELEASE_TAG:-}"
 
           if [[ -z "${TAG}" ]]; then
-            echo "No tag provided and no suitable v1.* or v2.* tags found. Skipping."
+            echo "No release tag found in event payload. Skipping."
             exit 0
           fi
 
@@ -69,32 +45,20 @@ jobs:
           if [[ ! "$TAG" =~ ^v ]]; then TAG="v$TAG"; fi
           echo "Detected tag: $TAG"
 
-          # Must be stable SemVer for major 1 or 2
-          if ! echo "$TAG" | grep -Eq '^v(1|2)\.[0-9]+\.[0-9]+$'; then
+          # Must be stable SemVer (vMAJOR.MINOR.PATCH)
           if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Not a stable SemVer tag ($TAG). Skipping."
             exit 0
           fi
 
-          # Extract MAJOR (1 or 2)
+          # Extract MAJOR (any integer)
           MAJOR="$(echo "$TAG" | sed -E 's/^v([0-9]+)\..*/\1/')"
           FLOATING="v${MAJOR}"
 
-          # Ensure the tag exists locally (or create it if requested during manual run)
+          # Ensure the tag exists locally
           if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${CREATE_IF_MISSING}" == "true" ]]; then
-              echo "Tag $TAG not found; creating annotated tag at HEAD for testing..."
-              git tag -a "$TAG" -m "Test tag created by workflow" HEAD
-              git push origin "refs/tags/$TAG"
-            else
-              echo "Tag $TAG not found locally after fetch. Aborting."
-              exit 1
-            fi
-          fi
-
-          # Allow overriding the floating tag name for testing (e.g., v1-ghost)
-          if [[ -n "${INPUT_FLOATING:-}" ]]; then
-            FLOATING="${INPUT_FLOATING}"
+            echo "Tag $TAG not found locally after fetch. Aborting."
+            exit 1
           fi
 
           echo "Moving floating tag ${FLOATING} -> $TAG"
