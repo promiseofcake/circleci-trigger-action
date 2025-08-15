@@ -1,0 +1,66 @@
+name: Update release tags (SemVer majors)
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-floating:
+    # Only run for actual published releases (not drafts/prereleases)
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease && !github.event.release.draft }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository (full history for tags)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Update floating v<MAJOR> tag to this release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          # Use the published release tag
+          TAG="${RELEASE_TAG:-}"
+
+          if [[ -z "${TAG}" ]]; then
+            echo "No release tag found in event payload. Skipping."
+            exit 0
+          fi
+
+          # Normalize to start with 'v'
+          if [[ ! "$TAG" =~ ^v ]]; then TAG="v$TAG"; fi
+          echo "Detected tag: $TAG"
+
+          # Must be stable SemVer (vMAJOR.MINOR.PATCH)
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Not a stable SemVer tag ($TAG). Skipping."
+            exit 0
+          fi
+
+          # Extract MAJOR (any integer)
+          MAJOR="$(echo "$TAG" | sed -E 's/^v([0-9]+)\..*/\1/')"
+          FLOATING="v${MAJOR}"
+
+          # Ensure the tag exists locally
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG not found locally after fetch. Aborting."
+            exit 1
+          fi
+
+          echo "Moving floating tag ${FLOATING} -> $TAG"
+          git tag -fa "${FLOATING}" "$TAG" -m "${FLOATING} -> $TAG"
+          git push origin "refs/tags/${FLOATING}" --force
