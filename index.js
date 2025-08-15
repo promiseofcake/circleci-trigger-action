@@ -52,7 +52,7 @@ async function run() {
       .catch((err) => {
         console.log("HTTP Error: ", err.response?.data || err.message);
         core.setFailed(err.message);
-      })
+      });
 
   } catch (error) {
     console.log("Error: ", error.message);
