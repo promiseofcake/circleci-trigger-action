@@ -1,16 +1,16 @@
 # promiseofcake/circleci-trigger-action
 
-Github Action to trigger workflow runs via [API call in CircleCI](https://circleci.com/docs/api/v2/#get-a-pipeline-39-s-workflows).
+GitHub Action to trigger workflow runs via [CircleCI API](https://circleci.com/docs/api/v2/).
 
 ## Use-case
 
-This action is for a very niche-audience, individuals who are running workflows
+This action is for a very niche audience: individuals who are running workflows
 in CircleCI but need to perform manual runs outside the scope of the provided /
-avaialble CircleCI triggering mechanisms.
+available CircleCI triggering mechanisms.
 
-One may ask, why would I use CircleCI if I am also using Github Actions? This
+One may ask, why would I use CircleCI if I am also using GitHub Actions? This
 action does not aim to answer that question, but if you happen to be working in
-that paradigm, hopefuly it will be of use to you.
+that paradigm, hopefully it will be of use to you.
 
 The main use cases are:
 
@@ -19,7 +19,7 @@ The main use cases are:
 
 ### Caveat
 
-Since CircleCI already allows individuals to trigger builds on pushes in a pull request context, this action isn't strictly designed for that. If for some reason you want to do that, you will need to do the parsing and groking of the branch name yourself from the [Github Context](https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#github-context) as opposed to following the example below.
+Since CircleCI already allows individuals to trigger builds on pushes in a pull request context, this action isn't strictly designed for that. If for some reason you want to do that, you will need to do the parsing and grokking of the branch name yourself from the [GitHub Context](https://docs.github.com/en/actions/learn-github-actions/contexts#github-context) as opposed to following the example below.
 
 ## Usage
 
@@ -27,6 +27,7 @@ Requirements:
 
 * CircleCI User API Token (exposed as GitHub secret)
 * CircleCI Configured Parameterized Workflow (configured on CircleCI)
+* CircleCI Pipeline Definition ID (found in Project Settings > Pipelines)
 
 See the sample Action config:
 
@@ -42,12 +43,13 @@ jobs:
     steps:
       - name: Capture triggering branch name
         run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-      - name: Trigger CircleCI build-beta workflow.
-        uses: promiseofcake/circleci-trigger-action@v1
+      - name: Trigger CircleCI workflow
+        uses: promiseofcake/circleci-trigger-action@v2
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
-          project-slug: promiseofcake/circleci-trigger-action
+          project-slug: ${{ github.repository }}
           branch: ${{ env.BRANCH_NAME }}
+          definition-id: ${{ secrets.CIRCLECI_DEFINITION_ID }}
           payload: '{"run_output_workflow": true}'
 ```
 
@@ -73,4 +75,30 @@ workflows:
     when: << pipeline.parameters.run_output_workflow >>
     jobs:
       - output
+```
+
+## Versioning
+
+- `v1`: existing behavior; will continue to be supported for a period of time.
+- `v2`: updated behavior using CircleCI's `pipeline/run` API and a required `definition-id` input.
+
+We recommend pinning to a floating major tag like `@v2`. The floating `@v1` will continue to track the latest v1.x.y for now.
+
+## Migrating from v1 to v2
+
+1. Change your workflow reference to `uses: promiseofcake/circleci-trigger-action@v2`.
+2. Add the new required input `definition-id` (find it in CircleCI Project Settings → Pipelines). Store it in a secret (e.g., `CIRCLECI_DEFINITION_ID`).
+3. Ensure `project-slug` is exactly `org/repo` (you can use `${{ github.repository }}`).
+4. Keep your `payload` JSON as-is to pass parameters to your CircleCI config.
+
+Example snippet:
+
+```yaml
+uses: promiseofcake/circleci-trigger-action@v2
+with:
+  user-token: ${{ secrets.CIRCLECI_TOKEN }}
+  project-slug: ${{ github.repository }}
+  branch: ${{ github.ref_name }}
+  definition-id: ${{ secrets.CIRCLECI_DEFINITION_ID }}
+  payload: '{"run_output_workflow": true}'
 ```
