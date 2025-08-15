@@ -71,7 +71,8 @@ jobs:
 
           # Must be stable SemVer for major 1 or 2
           if ! echo "$TAG" | grep -Eq '^v(1|2)\.[0-9]+\.[0-9]+$'; then
-            echo "Not a stable v1/v2 SemVer tag ($TAG). Skipping."
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Not a stable SemVer tag ($TAG). Skipping."
             exit 0
           fi
 
