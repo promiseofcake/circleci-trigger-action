@@ -22,10 +22,11 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT }}
       - name: setup git config
         run: |
           git config user.name "Lucas Kacher"
-          git config user.email "<lucaskacher@gmail.com>"
+          git config user.email "1462322+promiseofcake@users.noreply.github.com"
       - name: Set Node.js 22.x
         uses: actions/setup-node@v6.2.0
         with:
