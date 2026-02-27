@@ -29,7 +29,7 @@
   "homepage": "https://github.com/promiseofcake/circleci-trigger-action#readme",
   "dependencies": {
     "@actions/core": "^2.0.0",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "util": "^0.12.5"
   },
   "devDependencies": {
