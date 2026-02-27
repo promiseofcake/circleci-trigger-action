@@ -22,6 +22,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT }}
       - name: setup git config
         run: |
           git config user.name "Lucas Kacher"
