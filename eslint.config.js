@@ -1,4 +1,4 @@
-module.exports = [
+export default [
   {
     ignores: ['dist/', 'coverage/', 'node_modules/'],
   },
@@ -6,16 +6,11 @@ module.exports = [
     files: ['**/*.js'],
     languageOptions: {
       ecmaVersion: 2020,
-      sourceType: 'commonjs',
+      sourceType: 'module',
       globals: {
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        exports: 'writable',
-        module: 'writable',
-        require: 'readonly',
         global: 'readonly',
         Atomics: 'readonly',
         SharedArrayBuffer: 'readonly',

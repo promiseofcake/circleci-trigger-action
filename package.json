@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "GitHub Action to trigger CircleCI pipelines with custom parameters",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "lint": "eslint .",
     "prepare": "ncc build index.js -o dist --source-map --license licenses.txt",

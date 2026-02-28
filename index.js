@@ -1,5 +1,5 @@
-const core = require('@actions/core');
-const axios = require('axios');
+import * as core from '@actions/core';
+import axios from 'axios';
 
 async function run() {
   try {
