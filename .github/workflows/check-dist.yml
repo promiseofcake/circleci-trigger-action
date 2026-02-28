@@ -5,11 +5,7 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
   pull_request:
-    paths-ignore:
-      - '**.md'
   workflow_dispatch:
 
 jobs:
@@ -18,24 +14,37 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check for non-doc changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            src:
+              - '!**.md'
       - uses: actions/checkout@v6
+        if: steps.filter.outputs.src == 'true'
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GH_PAT }}
       - name: setup git config
+        if: steps.filter.outputs.src == 'true'
         run: |
           git config user.name "Lucas Kacher"
           git config user.email "1462322+promiseofcake@users.noreply.github.com"
       - name: Set Node.js 22.x
+        if: steps.filter.outputs.src == 'true'
         uses: actions/setup-node@v6.2.0
         with:
           node-version: 22.x
       - name: Install dependencies
+        if: steps.filter.outputs.src == 'true'
         run: npm ci
       - name: Rebuild the dist/ directory
+        if: steps.filter.outputs.src == 'true'
         run: npm run prepare
       - name: Compare the expected and actual dist/ directories
+        if: steps.filter.outputs.src == 'true'
         run: |
           if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
             git add .
