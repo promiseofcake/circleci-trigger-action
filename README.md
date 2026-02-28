@@ -44,7 +44,7 @@ jobs:
       - name: Capture triggering branch name
         run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
       - name: Trigger CircleCI workflow
-        uses: promiseofcake/circleci-trigger-action@v2
+        uses: promiseofcake/circleci-trigger-action@v3
         with:
           user-token: ${{ secrets.CIRCLECI_TOKEN }}
           project-slug: ${{ github.repository }}
@@ -79,14 +79,15 @@ workflows:
 
 ## Versioning
 
-- `v1`: existing behavior; will continue to be supported for a period of time.
+- `v3`: ESM-only build, runs on `node24`. Functionally identical to `v2`.
 - `v2`: updated behavior using CircleCI's `pipeline/run` API and a required `definition-id` input.
+- `v1`: **no longer supported.** Uses the legacy CircleCI API.
 
-We recommend pinning to a floating major tag like `@v2`. The floating `@v1` will continue to track the latest v1.x.y for now.
+We recommend pinning to a floating major tag like `@v3`. Existing `@v2` users can upgrade to `@v3` with no configuration changes.
 
-## Migrating from v1 to v2
+## Migrating from v1 to v2+
 
-1. Change your workflow reference to `uses: promiseofcake/circleci-trigger-action@v2`.
+1. Change your workflow reference to `uses: promiseofcake/circleci-trigger-action@v3`.
 2. Add the new required input `definition-id` (find it in CircleCI Project Settings → Pipelines). Store it in a secret (e.g., `CIRCLECI_DEFINITION_ID`).
 3. Ensure `project-slug` is exactly `org/repo` (you can use `${{ github.repository }}`).
 4. Keep your `payload` JSON as-is to pass parameters to your CircleCI config.
@@ -94,7 +95,7 @@ We recommend pinning to a floating major tag like `@v2`. The floating `@v1` will
 Example snippet:
 
 ```yaml
-uses: promiseofcake/circleci-trigger-action@v2
+uses: promiseofcake/circleci-trigger-action@v3
 with:
   user-token: ${{ secrets.CIRCLECI_TOKEN }}
   project-slug: ${{ github.repository }}
