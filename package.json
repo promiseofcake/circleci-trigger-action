@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "GitHub Action to trigger CircleCI pipelines with custom parameters",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "lint": "eslint .",
     "prepare": "ncc build index.js -o dist --source-map --license licenses.txt",
@@ -28,7 +29,7 @@
   },
   "homepage": "https://github.com/promiseofcake/circleci-trigger-action#readme",
   "dependencies": {
-    "@actions/core": "^2.0.0",
+    "@actions/core": "^3.0.0",
     "axios": "^1.13.6",
     "util": "^0.12.5"
   },
