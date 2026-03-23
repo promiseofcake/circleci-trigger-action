@@ -34,7 +34,7 @@ jobs:
           git config user.email "1462322+promiseofcake@users.noreply.github.com"
       - name: Set Node.js 22.x
         if: steps.filter.outputs.src == 'true'
-        uses: actions/setup-node@v6.2.0
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22.x
       - name: Install dependencies
