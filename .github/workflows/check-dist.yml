@@ -14,6 +14,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT }}
       - name: Check for non-doc changes
         id: filter
         uses: dorny/paths-filter@v4
@@ -21,12 +26,6 @@ jobs:
           filters: |
             src:
               - '!**.md'
-      - uses: actions/checkout@v6
-        if: steps.filter.outputs.src == 'true'
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GH_PAT }}
       - name: setup git config
         if: steps.filter.outputs.src == 'true'
         run: |
