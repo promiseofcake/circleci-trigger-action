@@ -29,13 +29,13 @@
   },
   "homepage": "https://github.com/promiseofcake/circleci-trigger-action#readme",
   "dependencies": {
-    "@actions/core": "^3.0.0",
-    "axios": "^1.15.0",
+    "@actions/core": "^3.0.1",
+    "axios": "^1.16.0",
     "util": "^0.12.5"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.38.4",
-    "eslint": "^10.2.0",
-    "jest": "^30.3.0"
+    "eslint": "^10.3.0",
+    "jest": "^30.4.1"
   }
 }
