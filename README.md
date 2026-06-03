@@ -85,6 +85,10 @@ workflows:
 
 We recommend pinning to a floating major tag like `@v3`. Existing `@v2` users can upgrade to `@v3` with no configuration changes.
 
+## AI-Assisted Development
+
+This project uses [Claude Code](https://claude.com/claude-code) for AI-assisted development. All code is reviewed and approved by humans before merging.
+
 ## Migrating from v1 to v2+
 
 1. Change your workflow reference to `uses: promiseofcake/circleci-trigger-action@v3`.
