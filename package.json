@@ -1,6 +1,6 @@
 {
   "name": "circleci-trigger-action",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "GitHub Action to trigger CircleCI pipelines with custom parameters",
   "main": "index.js",
   "type": "module",
@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@vercel/ncc": "^0.45.0",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "jest": "^30.4.2"
   }
 }
