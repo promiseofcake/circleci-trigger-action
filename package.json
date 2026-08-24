@@ -1,6 +1,6 @@
 {
   "name": "circleci-trigger-action",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "GitHub Action to trigger CircleCI pipelines with custom parameters",
   "main": "index.js",
   "type": "module",
