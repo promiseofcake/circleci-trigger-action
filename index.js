@@ -4,6 +4,7 @@ import axios from 'axios';
 async function run() {
   try {
     const userToken = core.getInput('user-token');
+    core.setSecret(userToken);
     const projectSlug = core.getInput('project-slug');
     const branch = core.getInput('branch');
     const definitionId = core.getInput('definition-id');
