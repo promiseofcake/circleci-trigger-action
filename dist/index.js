@@ -36025,7 +36025,7 @@ function exportVariable(name, val) {
  * ```
  */
 function core_setSecret(secret) {
-    issueCommand('add-mask', {}, secret);
+    command_issueCommand('add-mask', {}, secret);
 }
 /**
  * Prepends inputPath to the PATH (for this action and future actions)
@@ -45121,6 +45121,7 @@ axios.default = axios;
 async function run() {
   try {
     const userToken = getInput('user-token');
+    core_setSecret(userToken);
     const projectSlug = getInput('project-slug');
     const branch = getInput('branch');
     const definitionId = getInput('definition-id');
