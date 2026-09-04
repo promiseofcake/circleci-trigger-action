@@ -36299,12 +36299,65 @@ const utils_hasOwnProperty = (
     hasOwnProperty.call(obj, prop)
 )(Object.prototype);
 
+const isUnsafeObjectKey = (prop) =>
+  typeof prop === 'string' &&
+  (prop === '__proto__' || prop === 'constructor' || prop === 'prototype');
+
 /**
- * Walk the prototype chain (excluding the shared Object.prototype) looking for
- * an own `prop`. This distinguishes genuine own/inherited members — including
- * class accessors and template prototypes — from members injected via
- * Object.prototype pollution (e.g. `Object.prototype.username = '...'`), which
- * live on Object.prototype itself and are therefore never matched.
+ * Determine whether an inherited object must be treated as a shared-prototype
+ * boundary. Cross-realm Object.prototype objects cannot be distinguished
+ * reliably from application-created null-prototype objects because their
+ * properties are mutable, so all inherited terminal prototypes are excluded
+ * as a fail-closed boundary. A null-prototype source still keeps its own
+ * properties, as produced by mergeConfig and other safe materialization paths.
+ *
+ * @param {*} obj The object to inspect
+ * @param {*} prototype The object's prototype
+ * @param {boolean} source Whether obj is the original traversal source
+ *
+ * @returns {boolean} True when obj is a safe prototype traversal boundary
+ */
+const isPrototypeBoundary = (obj, prototype, source) =>
+  obj === Object.prototype || (!source && prototype === null);
+
+/**
+ * Determine whether an object can retain its identity through code paths that
+ * add, replace, and remove config properties without bypassing unsafe-key
+ * filtering. Immutable objects, unsafe-key-bearing objects, and objects with
+ * accessor or restricted data properties must be materialized instead.
+ *
+ * @param {*} obj The object to inspect
+ *
+ * @returns {boolean} True when every own property is safe and fully mutable
+ */
+const isSafeAndFullyMutable = (obj) => {
+  if (!Object.isExtensible(obj)) {
+    return false;
+  }
+
+  const props = Object.getOwnPropertyNames(obj);
+
+  if (Object.getOwnPropertySymbols) {
+    props.push(...Object.getOwnPropertySymbols(obj));
+  }
+
+  return props.every((prop) => {
+    if (isUnsafeObjectKey(prop)) {
+      return false;
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(obj, prop);
+
+    return !!descriptor && descriptor.configurable && descriptor.writable === true;
+  });
+};
+
+/**
+ * Walk the prototype chain (excluding the source realm's Object.prototype)
+ * looking for an own `prop`. This distinguishes genuine own/inherited members
+ * — including class accessors and template prototypes — from members injected
+ * via Object.prototype pollution (e.g. `Object.prototype.username = '...'`),
+ * which live on Object.prototype itself and are therefore never matched.
  *
  * @param {*} thing The value whose chain to inspect
  * @param {string|symbol} prop The property key to look for
@@ -36315,16 +36368,22 @@ const hasOwnInPrototypeChain = (thing, prop) => {
   let obj = thing;
   const seen = [];
 
-  while (obj != null && obj !== Object.prototype) {
+  while (obj != null) {
     if (seen.indexOf(obj) !== -1) {
       return false;
     }
     seen.push(obj);
 
+    const prototype = getPrototypeOf(obj);
+
+    if (isPrototypeBoundary(obj, prototype, obj === thing)) {
+      return false;
+    }
+
     if (utils_hasOwnProperty(obj, prop)) {
       return true;
     }
-    obj = getPrototypeOf(obj);
+    obj = prototype;
   }
   return false;
 };
@@ -36342,6 +36401,69 @@ const hasOwnInPrototypeChain = (thing, prop) => {
  */
 const getSafeProp = (obj, prop) =>
   obj != null && hasOwnInPrototypeChain(obj, prop) ? obj[prop] : undefined;
+
+/**
+ * Flatten an object and its application-defined prototype chain into a
+ * null-prototype object. Members inherited only from the source realm's
+ * Object.prototype are deliberately excluded, while class/template members
+ * below that boundary are preserved.
+ *
+ * @param {*} thing The value to flatten
+ *
+ * @returns {*} A null-prototype copy, or the original value when it is already
+ * structurally safe or is not an object
+ */
+const toSafeFlatObject = (thing) => {
+  if (thing == null || (typeof thing !== 'object' && typeof thing !== 'function')) {
+    return thing;
+  }
+
+  const sourcePrototype = getPrototypeOf(thing);
+
+  if (sourcePrototype === null && isSafeAndFullyMutable(thing)) {
+    return thing;
+  }
+
+  const result = Object.create(null);
+  const merged = Object.create(null);
+  const seen = [];
+  let current = thing;
+
+  while (current != null) {
+    if (seen.indexOf(current) !== -1) {
+      break;
+    }
+
+    seen.push(current);
+
+    const prototype = current === thing ? sourcePrototype : getPrototypeOf(current);
+
+    if (isPrototypeBoundary(current, prototype, current === thing)) {
+      break;
+    }
+
+    const props = Object.getOwnPropertyNames(current);
+
+    if (Object.getOwnPropertySymbols) {
+      props.push(...Object.getOwnPropertySymbols(current));
+    }
+
+    for (const prop of props) {
+      if (isUnsafeObjectKey(prop)) {
+        continue;
+      }
+
+      if (!utils_hasOwnProperty(merged, prop)) {
+        result[prop] = thing[prop];
+        merged[prop] = true;
+      }
+    }
+
+    current = prototype;
+  }
+
+  return result;
+};
 
 const kindOf = ((cache) => (thing) => {
   const str = utils_toString.call(thing);
@@ -36474,12 +36596,10 @@ const isPlainObject = (val) => {
 
   const prototype = getPrototypeOf(val);
   return (
-    (prototype === null ||
-      prototype === Object.prototype ||
-      getPrototypeOf(prototype) === null) &&
-    // Treat any genuine (non-Object.prototype-polluted) Symbol.toStringTag or
-    // Symbol.iterator as evidence the value is a tagged/iterable type rather
-    // than a plain object, while ignoring keys injected onto Object.prototype.
+    (prototype === null || prototype === Object.prototype || getPrototypeOf(prototype) === null) &&
+    // Treat safe own/inherited Symbol.toStringTag or Symbol.iterator members as
+    // evidence the value is tagged/iterable, while ignoring members reachable
+    // only through shared or terminal prototype boundaries.
     !hasOwnInPrototypeChain(val, toStringTag) &&
     !hasOwnInPrototypeChain(val, iterator)
   );
@@ -37293,6 +37413,7 @@ const isSafeIterable = (thing) =>
   hasOwnProp: utils_hasOwnProperty, // an alias to avoid ESLint no-prototype-builtins detection
   hasOwnInPrototypeChain,
   getSafeProp,
+  toSafeFlatObject,
   reduceDescriptors,
   freezeMethods,
   toObjectSet,
@@ -38266,28 +38387,18 @@ function toFormData(obj, formData, options) {
   // eslint-disable-next-line no-param-reassign
   formData = formData || new (classes_FormData || FormData)();
 
-  // eslint-disable-next-line no-param-reassign
-  options = utils.toFlatObject(
-    options,
-    {
-      metaTokens: true,
-      dots: false,
-      indexes: false,
-    },
-    false,
-    function defined(option, source) {
-      // eslint-disable-next-line no-eq-null,eqeqeq
-      return !utils.isUndefined(source[option]);
-    }
-  );
+  const option = (name, fallback) => {
+    const value = utils.getSafeProp(options, name);
+    return utils.isUndefined(value) ? fallback : value;
+  };
 
-  const metaTokens = options.metaTokens;
+  const metaTokens = option('metaTokens', true);
   // eslint-disable-next-line no-use-before-define
-  const visitor = options.visitor || defaultVisitor;
-  const dots = options.dots;
-  const indexes = options.indexes;
-  const _Blob = options.Blob || (typeof Blob !== 'undefined' && Blob);
-  const maxDepth = options.maxDepth === undefined ? DEFAULT_FORM_DATA_MAX_DEPTH : options.maxDepth;
+  const visitor = option('visitor') || defaultVisitor;
+  const dots = option('dots', false);
+  const indexes = option('indexes', false);
+  const _Blob = option('Blob') || (typeof Blob !== 'undefined' && Blob);
+  const maxDepth = option('maxDepth', DEFAULT_FORM_DATA_MAX_DEPTH);
   const useBlob = _Blob && utils.isSpecCompliantForm(formData);
   const stack = [];
 
@@ -38317,7 +38428,10 @@ function toFormData(obj, formData, options) {
       if (classes_Buffer && classes_Buffer.isBufferAvailable()) {
         return classes_Buffer.from(value);
       }
-      throw new core_AxiosError('Blob is not supported. Use a Buffer instead.', core_AxiosError.ERR_NOT_SUPPORT);
+      throw new core_AxiosError(
+        'Blob is not supported. Use a Buffer instead.',
+        core_AxiosError.ERR_NOT_SUPPORT
+      );
     }
 
     return value;
@@ -38589,9 +38703,57 @@ function buildURL(url, params, options) {
 
 
 
+const InterceptorManager_$internals = Symbol('internals');
+
+// `handlers` is public and may be replaced with a nullish value by user code;
+// `clear()` has always tolerated that. Treat it as an empty stack rather than
+// dereferencing it.
+function countHandlers(handlers) {
+  return handlers ? handlers.length : 0;
+}
+
+function trimHandlers(handlers) {
+  if (!handlers) {
+    return;
+  }
+
+  while (handlers.length && handlers[handlers.length - 1] === null) {
+    handlers.pop();
+  }
+}
+
+function syncHandlerEntries(manager, internals) {
+  const handlers = manager.handlers;
+  const length = countHandlers(handlers);
+
+  if (handlers !== internals.handlersRef) {
+    internals.handlersRef = handlers;
+    internals.handlerEntries.clear();
+  } else if (length !== internals.handlersLength) {
+    if (!length) {
+      internals.handlerEntries.clear();
+    } else {
+      internals.handlerEntries.forEach(function removeStaleEntry(entry, id) {
+        if (handlers[entry.index] !== entry.handler) {
+          internals.handlerEntries.delete(id);
+        }
+      });
+    }
+  }
+
+  internals.handlersLength = length;
+}
+
 class InterceptorManager {
   constructor() {
     this.handlers = [];
+    this[InterceptorManager_$internals] = {
+      handlersRef: this.handlers,
+      handlersLength: this.handlers.length,
+      handlerEntries: new Map(),
+      iterationDepth: 0,
+      nextId: 0,
+    };
   }
 
   /**
@@ -38604,13 +38766,30 @@ class InterceptorManager {
    * @return {Number} An ID used to remove interceptor later
    */
   use(fulfilled, rejected, options) {
-    this.handlers.push({
+    const handler = {
       fulfilled,
       rejected,
       synchronous: options ? options.synchronous : false,
       runWhen: options ? options.runWhen : null,
+    };
+    const internals = this[InterceptorManager_$internals];
+
+    if (this.handlers == null) {
+      this.handlers = [];
+    }
+
+    syncHandlerEntries(this, internals);
+
+    const id = internals.nextId++;
+
+    this.handlers.push(handler);
+    internals.handlerEntries.set(id, {
+      handler,
+      index: this.handlers.length - 1,
     });
-    return this.handlers.length - 1;
+    internals.handlersLength = this.handlers.length;
+
+    return id;
   }
 
   /**
@@ -38621,8 +38800,27 @@ class InterceptorManager {
    * @returns {void}
    */
   eject(id) {
-    if (this.handlers[id]) {
-      this.handlers[id] = null;
+    const internals = this[InterceptorManager_$internals];
+
+    syncHandlerEntries(this, internals);
+
+    const entry = internals.handlerEntries.get(id);
+
+    if (entry) {
+      internals.handlerEntries.delete(id);
+
+      // Ignore IDs invalidated by clear or direct replacement of handlers.
+      if (this.handlers[entry.index] !== entry.handler) {
+        return;
+      }
+
+      this.handlers[entry.index] = null;
+
+      // Do not reuse an index while forEach is walking its length snapshot.
+      if (!internals.iterationDepth) {
+        trimHandlers(this.handlers);
+        internals.handlersLength = this.handlers.length;
+      }
     }
   }
 
@@ -38634,6 +38832,7 @@ class InterceptorManager {
   clear() {
     if (this.handlers) {
       this.handlers = [];
+      syncHandlerEntries(this, this[InterceptorManager_$internals]);
     }
   }
 
@@ -38648,11 +38847,25 @@ class InterceptorManager {
    * @returns {void}
    */
   forEach(fn) {
-    utils.forEach(this.handlers, function forEachHandler(h) {
-      if (h !== null) {
-        fn(h);
+    const internals = this[InterceptorManager_$internals];
+
+    syncHandlerEntries(this, internals);
+
+    internals.iterationDepth++;
+
+    try {
+      utils.forEach(this.handlers, function forEachHandler(h) {
+        if (h !== null) {
+          fn(h);
+        }
+      });
+    } finally {
+      if (!--internals.iterationDepth) {
+        syncHandlerEntries(this, internals);
+        trimHandlers(this.handlers);
+        internals.handlersLength = countHandlers(this.handlers);
       }
-    });
+    }
   }
 }
 
@@ -38922,7 +39135,27 @@ function formDataToJSON(formData) {
 
 /* harmony default export */ const helpers_formDataToJSON = (formDataToJSON);
 
+;// CONCATENATED MODULE: ./node_modules/axios/lib/core/methodList.js
+
+
+const methodList = Object.freeze([
+  'get',
+  'delete',
+  'head',
+  'options',
+  'post',
+  'put',
+  'patch',
+  'purge',
+  'link',
+  'unlink',
+  'query',
+]);
+
+/* harmony default export */ const core_methodList = (methodList);
+
 ;// CONCATENATED MODULE: ./node_modules/axios/lib/defaults/index.js
+
 
 
 
@@ -39095,7 +39328,7 @@ const defaults = {
   },
 };
 
-utils.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query'], (method) => {
+utils.forEach(core_methodList, (method) => {
   defaults.headers[method] = {};
 });
 
@@ -39237,6 +39470,32 @@ function combineURLs(baseURL, relativeURL) {
   return baseURL.slice(0, end) + '/' + relativeURL.replace(/^\/+/, '');
 }
 
+;// CONCATENATED MODULE: ./node_modules/axios/lib/helpers/normalizeURLForProtocolCheck.js
+
+
+const urlParserControlCharacters = /[\t\n\r]/g;
+
+/**
+ * Match WHATWG URL preprocessing before checking a URL's protocol.
+ *
+ * @param {string} url
+ *
+ * @returns {string}
+ */
+function normalizeURLForProtocolCheck(url) {
+  if (typeof url !== 'string') {
+    return url;
+  }
+
+  let start = 0;
+
+  while (start < url.length && url.charCodeAt(start) <= 0x20) {
+    start++;
+  }
+
+  return url.slice(start).replace(urlParserControlCharacters, '');
+}
+
 ;// CONCATENATED MODULE: ./node_modules/axios/lib/core/buildFullPath.js
 
 
@@ -39244,20 +39503,8 @@ function combineURLs(baseURL, relativeURL) {
 
 
 
+
 const malformedHttpProtocol = /^https?:(?!\/\/)/i;
-const httpProtocolControlCharacters = /[\t\n\r]/g;
-
-function stripLeadingC0ControlOrSpace(url) {
-  let i = 0;
-  while (i < url.length && url.charCodeAt(i) <= 0x20) {
-    i++;
-  }
-  return url.slice(i);
-}
-
-function normalizeURLForProtocolCheck(url) {
-  return stripLeadingC0ControlOrSpace(url).replace(httpProtocolControlCharacters, '');
-}
 
 // Redact the parts of a URL that can carry secrets before it is embedded in an
 // error message. AxiosError.toJSON() serializes `message` verbatim and errors
@@ -39443,7 +39690,7 @@ var follow_redirects = __nccwpck_require__(1573);
 ;// CONCATENATED MODULE: external "zlib"
 const external_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("zlib");
 ;// CONCATENATED MODULE: ./node_modules/axios/lib/env/data.js
-const VERSION = "1.19.0";
+const VERSION = "1.20.0";
 ;// CONCATENATED MODULE: ./node_modules/axios/lib/helpers/parseProtocol.js
 
 
@@ -39461,7 +39708,7 @@ function parseProtocol(url) {
 
 // RFC 2397: data:[<mediatype>][;base64],<data>
 // mediatype = type/subtype followed by optional ;name=value parameters
-const DATA_URL_PATTERN = /^([^,;]+\/[^,;]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
+const DATA_URL_PATTERN = /^([^,;/]+\/[^,;/]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
 
 /**
  * Parse data uri to a Buffer or Blob
@@ -39504,9 +39751,10 @@ function fromDataURI(uri, asBlob, options) {
       mime = 'text/plain' + params;
     }
 
-    const buffer = encoding === 'base64'
-      ? Buffer.from(body, 'base64')
-      : Buffer.from(decodeURIComponent(body), encoding);
+    const buffer =
+      encoding === 'base64'
+        ? Buffer.from(body, 'base64')
+        : Buffer.from(decodeURIComponent(body), encoding);
 
     if (asBlob) {
       if (!_Blob) {
@@ -39898,6 +40146,7 @@ class Http2Sessions {
 
   getSession(authority, options) {
     options = Object.assign(
+      Object.create(null),
       {
         sessionTimeout: 1000,
       },
@@ -39988,6 +40237,7 @@ class Http2Sessions {
     }
 
     session.once('close', removeSession);
+    session.once('error', removeSession);
 
     let entry = [session, options];
 
@@ -40023,6 +40273,16 @@ const callbackify = (fn, reducer) => {
 
 ;// CONCATENATED MODULE: ./node_modules/axios/lib/helpers/shouldBypassProxy.js
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '0.0.0.0']);
+
+const trimTrailingDots = (value) => {
+  let end = value.length;
+
+  while (end && value.charCodeAt(end - 1) === 46) {
+    end--;
+  }
+
+  return end === value.length ? value : value.slice(0, end);
+};
 
 const isIPv4Loopback = (host) => {
   const parts = host.split('.');
@@ -40081,7 +40341,7 @@ const normalizeIPAddress = (host) => {
   if (h.charAt(0) === '[' && h.charAt(h.length - 1) === ']') {
     h = h.slice(1, -1);
   }
-  h = h.replace(/\.+$/, '');
+  h = trimTrailingDots(h);
 
   // Allowed characters for any IPv4 shape: digits, dot, 'x', 'X', hex digits.
   if (!/^[0-9.xXa-fA-F]+$/.test(h)) return host;
@@ -40158,9 +40418,7 @@ const isIPv6Unspecified = (host) => {
     const explicitGroups = leftGroups.length + rightGroups.length;
 
     return (
-      explicitGroups < 8 &&
-      leftGroups.every(isIPv6ZeroGroup) &&
-      rightGroups.every(isIPv6ZeroGroup)
+      explicitGroups < 8 && leftGroups.every(isIPv6ZeroGroup) && rightGroups.every(isIPv6ZeroGroup)
     );
   }
 
@@ -40256,7 +40514,8 @@ const parseNoProxyEntry = (entry) => {
 // allowing the proxy-bypass policy to be circumvented by using the alternate
 // representation. Returns the input unchanged when not IPv4-mapped.
 const IPV4_MAPPED_DOTTED_RE = /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:(\d+\.\d+\.\d+\.\d+)$/i;
-const IPV4_MAPPED_HEX_RE = /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i;
+const IPV4_MAPPED_HEX_RE =
+  /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i;
 
 const unmapIPv4MappedIPv6 = (host) => {
   if (typeof host !== 'string' || host.indexOf(':') === -1) return host;
@@ -40274,6 +40533,57 @@ const unmapIPv4MappedIPv6 = (host) => {
   return host;
 };
 
+const IPV4_OCTET_RE = /^(?:0|[1-9]\d{0,2})$/;
+
+const ipv4ToBytes = (host) => {
+  const parts = host.split('.');
+
+  return parts.length === 4 &&
+    parts.every((part) => IPV4_OCTET_RE.test(part) && Number(part) <= 255)
+    ? parts.map(Number)
+    : null;
+};
+
+const IPV6_GROUP_RE = /^[0-9a-f]{1,4}$/i;
+
+const ipv6ToBytes = (host) => {
+  const halves = host.split('::');
+
+  if (halves.length > 2) {
+    return null;
+  }
+
+  const groups = halves[0] ? halves[0].split(':') : [];
+
+  if (halves.length === 2) {
+    const rear = halves[1] ? halves[1].split(':') : [];
+    const missing = 8 - groups.length - rear.length;
+
+    if (missing < 1) {
+      return null;
+    }
+
+    groups.push(...new Array(missing).fill('0'), ...rear);
+  }
+
+  if (groups.length !== 8 || groups.some((group) => !IPV6_GROUP_RE.test(group))) {
+    return null;
+  }
+
+  return groups.flatMap((group) => {
+    const value = Number.parseInt(group, 16);
+    return [(value >> 8) & 0xff, value & 0xff];
+  });
+};
+
+const ipToBytes = (host) => {
+  if (typeof host !== 'string' || !host) {
+    return null;
+  }
+
+  return host.indexOf(':') !== -1 ? ipv6ToBytes(host) : ipv4ToBytes(host);
+};
+
 const normalizeNoProxyHost = (hostname) => {
   if (!hostname) {
     return hostname;
@@ -40283,7 +40593,7 @@ const normalizeNoProxyHost = (hostname) => {
     hostname = hostname.slice(1, -1);
   }
 
-  const trimmed = hostname.replace(/\.+$/, '');
+  const trimmed = trimTrailingDots(hostname);
 
   // IPv4 shorthand/octal/hex → dotted-decimal; helper is a no-op for inputs
   // containing ':' (IPv6 and IPv4-mapped IPv6) so we fall through to unmap.
@@ -40293,6 +40603,110 @@ const normalizeNoProxyHost = (hostname) => {
   }
 
   return unmapIPv4MappedIPv6(trimmed);
+};
+
+const normalizeCidrBase = (input) => {
+  let base = input;
+  const startsBracket = base.charAt(0) === '[';
+  const endsBracket = base.charAt(base.length - 1) === ']';
+  const hasBracket = base.includes('[') || base.includes(']');
+
+  if (startsBracket || endsBracket) {
+    if (!startsBracket || !endsBracket) {
+      return null;
+    }
+
+    base = base.slice(1, -1);
+
+    if (base.indexOf(':') === -1 || base.includes('[') || base.includes(']')) {
+      return null;
+    }
+  } else if (hasBracket) {
+    return null;
+  }
+
+  if (!base || base.charAt(base.length - 1) === '.') {
+    return null;
+  }
+
+  const wasIPv6 = base.indexOf(':') !== -1;
+
+  if (wasIPv6) {
+    try {
+      base = new URL(`http://[${base}]/`).hostname.slice(1, -1);
+    } catch (_err) {
+      return null;
+    }
+  } else {
+    base = normalizeIPAddress(base);
+
+    if (!ipv4ToBytes(base)) {
+      return null;
+    }
+  }
+
+  return { normalized: unmapIPv4MappedIPv6(base), wasIPv6 };
+};
+
+const CIDR_ENTRY_RE = /^(.+)\/(0|[1-9]\d{0,2})$/;
+
+const parseCidrEntry = (entry) => {
+  if (entry.indexOf('/') === -1) {
+    return undefined;
+  }
+
+  const match = CIDR_ENTRY_RE.exec(entry);
+
+  if (!match) {
+    return null;
+  }
+
+  let prefix = Number(match[2]);
+  const parsedBase = normalizeCidrBase(match[1]);
+
+  if (!parsedBase) {
+    return null;
+  }
+
+  const { normalized, wasIPv6 } = parsedBase;
+
+  if (wasIPv6 && normalized.indexOf(':') === -1) {
+    if (prefix < 96) {
+      return null;
+    }
+
+    prefix -= 96;
+  }
+
+  const bytes = ipToBytes(normalized);
+
+  if (!bytes || prefix > bytes.length * 8) {
+    return null;
+  }
+
+  return { bytes, prefix };
+};
+
+const isInSubnet = (addressBytes, networkBytes, prefix) => {
+  const fullBytes = prefix >> 3;
+
+  for (let i = 0; i < fullBytes; i++) {
+    if (addressBytes[i] !== networkBytes[i]) {
+      return false;
+    }
+  }
+
+  const remainingBits = prefix & 7;
+
+  if (remainingBits) {
+    const mask = (0xff << (8 - remainingBits)) & 0xff;
+
+    if ((addressBytes[fullBytes] & mask) !== (networkBytes[fullBytes] & mask)) {
+      return false;
+    }
+  }
+
+  return true;
 };
 
 function shouldBypassProxy(location) {
@@ -40318,6 +40732,7 @@ function shouldBypassProxy(location) {
     Number.parseInt(parsed.port, 10) || shouldBypassProxy_DEFAULT_PORTS[parsed.protocol.split(':', 1)[0]] || 0;
 
   const hostname = normalizeNoProxyHost(parsed.hostname.toLowerCase());
+  const hostnameBytes = ipToBytes(hostname);
 
   return noProxy.split(/[\s,]+/).some((entry) => {
     if (!entry) {
@@ -40326,6 +40741,17 @@ function shouldBypassProxy(location) {
 
     if (entry === '*') {
       return true;
+    }
+
+    const cidr = parseCidrEntry(entry);
+
+    if (cidr !== undefined) {
+      return (
+        cidr !== null &&
+        !!hostnameBytes &&
+        hostnameBytes.length === cidr.bytes.length &&
+        isInSubnet(hostnameBytes, cidr.bytes, cidr.prefix)
+      );
     }
 
     let [entryHost, entryPort] = parseNoProxyEntry(entry);
@@ -40414,7 +40840,7 @@ function speedometer(samplesCount, min) {
  * Throttle decorator
  * @param {Function} fn
  * @param {Number} freq
- * @return {Function}
+ * @return {Array<Function>}
  */
 function throttle(fn, freq) {
   let timestamp = 0;
@@ -40449,8 +40875,9 @@ function throttle(fn, freq) {
   };
 
   const flush = () => lastArgs && invoke(lastArgs);
+  const flushWith = (...args) => invoke(args);
 
-  return [throttled, flush];
+  return [throttled, flush, flushWith];
 }
 
 /* harmony default export */ const helpers_throttle = (throttle);
@@ -40465,7 +40892,7 @@ const progressEventReducer = (listener, isDownloadStream, freq = 3) => {
   const _speedometer = helpers_speedometer(50, 250);
 
   return helpers_throttle((e) => {
-    if (!e || typeof e.loaded !== 'number') {
+    if (!e || !utils.isNumber(e.loaded)) {
       return;
     }
     const rawLoaded = e.loaded;
@@ -40745,6 +41172,15 @@ const http_isHttps = /https:?/;
 const kAxiosSocketListener = Symbol('axios.http.socketListener');
 const kAxiosCurrentReq = Symbol('axios.http.currentReq');
 
+// A shared listener avoids retaining an adapter context for the lifetime of a
+// pooled socket. EventEmitter invokes listeners with `this` set to the emitter.
+function handleSocketError(err) {
+  const current = this[kAxiosCurrentReq];
+  if (current && !current.destroyed) {
+    current.destroy(err);
+  }
+}
+
 // Tags HttpsProxyAgent instances installed by setProxy() so the redirect path
 // can strip them without clobbering a user-supplied agent that happens to be
 // an HttpsProxyAgent.
@@ -40792,16 +41228,14 @@ function isNodeEnvProxyEnabled(agent, nodeVersion = process.versions && process.
   const agentOptions = agent && agent.options;
 
   return Boolean(
-    agentOptions &&
-      utils.hasOwnProp(agentOptions, 'proxyEnv') &&
-      agentOptions.proxyEnv != null
+    agentOptions && utils.hasOwnProp(agentOptions, 'proxyEnv') && agentOptions.proxyEnv != null
   );
 }
 
 function getProxyEnvAgent(options, configHttpAgent, configHttpsAgent) {
   return http_isHttps.test(options.protocol)
-    ? (configHttpsAgent || external_https_.globalAgent)
-    : (configHttpAgent || external_http_.globalAgent);
+    ? configHttpsAgent || external_https_.globalAgent
+    : configHttpAgent || external_http_.globalAgent;
 }
 
 function getTunnelingAgent(agentOptions, userHttpsAgent) {
@@ -40814,17 +41248,18 @@ function getTunnelingAgent(agentOptions, userHttpsAgent) {
     '#' +
     (agentOptions.auth || '');
   const cache = userHttpsAgent
-    ? (tunnelingAgentCacheUser.get(userHttpsAgent) ||
-        tunnelingAgentCacheUser.set(userHttpsAgent, new Map()).get(userHttpsAgent))
+    ? tunnelingAgentCacheUser.get(userHttpsAgent) ||
+      tunnelingAgentCacheUser.set(userHttpsAgent, new Map()).get(userHttpsAgent)
     : tunnelingAgentCache;
   let agent = cache.get(key);
   if (agent) return agent;
   // Forward the user's TLS options (custom CA, rejectUnauthorized, client cert,
   // etc.) into the tunneling agent so they apply to the origin TLS upgrade
   // performed after CONNECT. Our proxy fields take precedence on conflict.
-  const merged = userHttpsAgent && userHttpsAgent.options
-    ? { ...userHttpsAgent.options, ...agentOptions }
-    : agentOptions;
+  const merged =
+    userHttpsAgent && userHttpsAgent.options
+      ? { ...userHttpsAgent.options, ...agentOptions }
+      : agentOptions;
   agent = new dist(merged);
   if (userHttpsAgent && userHttpsAgent.options) {
     const originTLSOptions = { ...userHttpsAgent.options };
@@ -40921,13 +41356,22 @@ function isSameOriginRedirect(redirectOptions, requestDetails) {
  * @param {http.ClientRequestArgs} options
  * @param {AxiosProxyConfig} configProxy configuration from Axios options object
  * @param {string} location
+ * @param {boolean} [allowEnvProxy=true] whether environment proxy configuration can be used
  *
- * @returns {http.ClientRequestArgs}
+ * @returns {boolean} whether a proxy applies to the selected transport
  */
-function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, configHttpAgent) {
+function setProxy(
+  options,
+  configProxy,
+  location,
+  isRedirect,
+  configHttpsAgent,
+  configHttpAgent,
+  allowEnvProxy = true
+) {
   let proxy = configProxy;
   const proxyEnvAgent = getProxyEnvAgent(options, configHttpAgent, configHttpsAgent);
-  if (!proxy && proxy !== false && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
+  if (!proxy && proxy !== false && allowEnvProxy && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
     const proxyUrl = getProxyForUrl(location);
     if (proxyUrl) {
       if (!shouldBypassProxy(location)) {
@@ -41084,9 +41528,15 @@ function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, 
       redirectOptions.href,
       true,
       configHttpsAgent,
-      configHttpAgent
+      configHttpAgent,
+      allowEnvProxy
     );
   };
+
+  return Boolean(
+    proxy ||
+      (configProxy !== false && allowEnvProxy && isNodeEnvProxyEnabled(proxyEnvAgent))
+  );
 }
 
 const isHttpAdapterSupported =
@@ -41121,7 +41571,7 @@ const wrapAsync = (asyncExecutor) => {
 
 const resolveFamily = ({ address, family }) => {
   if (!utils.isString(address)) {
-    throw TypeError('address must be a string');
+    throw new core_AxiosError('address must be a string', core_AxiosError.ERR_BAD_OPTION_VALUE);
   }
   return {
     address,
@@ -41131,6 +41581,43 @@ const resolveFamily = ({ address, family }) => {
 
 const buildAddressEntry = (address, family) =>
   resolveFamily(utils.isObject(address) ? address : { address, family });
+
+const normalizedLookupCache = new WeakMap();
+
+const normalizeLookup = (lookup) => {
+  let normalized = normalizedLookupCache.get(lookup);
+
+  if (normalized) {
+    return normalized;
+  }
+
+  const callbackLookup = helpers_callbackify(lookup, (value) => (utils.isArray(value) ? value : [value]));
+
+  // Support opt.all, which is required by current Node.js releases.
+  normalized = (hostname, opt, cb) => {
+    callbackLookup(hostname, opt, (err, arg0, arg1) => {
+      if (err) {
+        return cb(err);
+      }
+
+      let addresses;
+
+      try {
+        addresses = utils.isArray(arg0)
+          ? arg0.map((addr) => buildAddressEntry(addr))
+          : [buildAddressEntry(arg0, arg1)];
+      } catch (error) {
+        return cb(error);
+      }
+
+      opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
+    });
+  };
+
+  normalizedLookupCache.set(lookup, normalized);
+
+  return normalized;
+};
 
 const http2Transport = {
   request(options, cb) {
@@ -41196,6 +41683,7 @@ const http2Transport = {
       let family = own('family');
       let httpVersion = own('httpVersion');
       if (httpVersion === undefined) httpVersion = 1;
+      const rawHttpVersion = httpVersion;
       let http2Options = own('http2Options');
       const httpAgent = own('httpAgent');
       const httpsAgent = own('httpsAgent');
@@ -41213,34 +41701,36 @@ const http2Transport = {
       let req;
       let connectPhaseTimer;
 
-      httpVersion = +httpVersion;
+      try {
+        httpVersion = +httpVersion;
+      } catch (err) {
+        throw new core_AxiosError(
+          'Invalid protocol version: value is not a number',
+          core_AxiosError.ERR_BAD_OPTION_VALUE,
+          config
+        );
+      }
 
       if (Number.isNaN(httpVersion)) {
-        throw TypeError(`Invalid protocol version: '${config.httpVersion}' is not a number`);
+        throw new core_AxiosError(
+          `Invalid protocol version: '${rawHttpVersion}' is not a number`,
+          core_AxiosError.ERR_BAD_OPTION_VALUE,
+          config
+        );
       }
 
       if (httpVersion !== 1 && httpVersion !== 2) {
-        throw TypeError(`Unsupported protocol version '${httpVersion}'`);
+        throw new core_AxiosError(
+          `Unsupported protocol version '${httpVersion}'`,
+          core_AxiosError.ERR_BAD_OPTION_VALUE,
+          config
+        );
       }
 
       const isHttp2 = httpVersion === 2;
 
       if (lookup) {
-        const _lookup = helpers_callbackify(lookup, (value) => (utils.isArray(value) ? value : [value]));
-        // hotfix to support opt.all option which is required for node 20.x
-        lookup = (hostname, opt, cb) => {
-          _lookup(hostname, opt, (err, arg0, arg1) => {
-            if (err) {
-              return cb(err);
-            }
-
-            const addresses = utils.isArray(arg0)
-              ? arg0.map((addr) => buildAddressEntry(addr))
-              : [buildAddressEntry(arg0, arg1)];
-
-            opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
-          });
-        };
+        lookup = normalizeLookup(lookup);
       }
 
       const abortEmitter = new external_events_.EventEmitter();
@@ -41333,7 +41823,9 @@ const http2Transport = {
       // prototype cannot influence URL base selection.
       const urlBase = socketPath
         ? 'http://localhost'
-        : (lib_platform.hasBrowserEnv ? lib_platform.origin : undefined);
+        : lib_platform.hasBrowserEnv
+          ? lib_platform.origin
+          : undefined;
       const parsed = new URL(fullPath, urlBase);
       const protocol = parsed.protocol || supportedProtocols[0];
 
@@ -41544,7 +42036,7 @@ const http2Transport = {
         return reject(
           core_AxiosError.from(err, core_AxiosError.ERR_BAD_REQUEST, config, null, null, {
             url: own('url'),
-            exists: true
+            exists: true,
           })
         );
       }
@@ -41552,9 +42044,15 @@ const http2Transport = {
       headers.set(
         'Accept-Encoding',
         utils.hasOwnProp(transitional, 'advertiseZstdAcceptEncoding') &&
-        transitional.advertiseZstdAcceptEncoding === true ? ACCEPT_ENCODING_WITH_ZSTD : ACCEPT_ENCODING,
+          transitional.advertiseZstdAcceptEncoding === true
+          ? ACCEPT_ENCODING_WITH_ZSTD
+          : ACCEPT_ENCODING,
         false
       );
+
+      if (isHttp2 && lookup) {
+        http2Options = Object.assign(Object.create(null), http2Options, { lookup });
+      }
 
       // Null-prototype to block prototype pollution gadgets on properties read
       // directly by Node's http.request (e.g. insecureHTTPParser, lookup).
@@ -41569,10 +42067,13 @@ const http2Transport = {
         beforeRedirect: dispatchBeforeRedirect,
         beforeRedirects: Object.create(null),
         http2Options,
+        createConnection: undefined,
       });
 
       // cacheable-lookup integration hotfix
       !utils.isUndefined(lookup) && (options.lookup = lookup);
+
+      let proxyApplied = false;
 
       if (socketPath) {
         if (typeof socketPath !== 'string') {
@@ -41609,13 +42110,17 @@ const http2Transport = {
           ? parsed.hostname.slice(1, -1)
           : parsed.hostname;
         options.port = parsed.port;
-        setProxy(
+        proxyApplied = setProxy(
           options,
           configProxy,
           protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path,
           false,
           httpsAgent,
-          httpAgent
+          httpAgent,
+          // The HTTP/2 transport connects independently of HTTP/1 agents, so it
+          // cannot apply either axios-resolved or agent-local environment proxies.
+          // Explicit proxy config is still processed and rejected below.
+          !isHttp2
         );
       }
       let transport;
@@ -41633,6 +42138,16 @@ const http2Transport = {
       }
 
       if (isHttp2) {
+        if (proxyApplied) {
+          return reject(
+            new core_AxiosError(
+              'HTTP/2 requests with a proxy are not supported',
+              core_AxiosError.ERR_NOT_SUPPORT,
+              config
+            )
+          );
+        }
+
         transport = http2Transport;
       } else {
         const configTransport = own('transport');
@@ -41747,7 +42262,11 @@ const http2Transport = {
                 transformStream,
                 progressEventDecorator(
                   responseLength,
-                  progressEventReducer(asyncDecorator(onDownloadProgress, scheduleProgress), true, 3)
+                  progressEventReducer(
+                    asyncDecorator(onDownloadProgress, scheduleProgress),
+                    true,
+                    3
+                  )
                 )
               )
             );
@@ -41945,18 +42464,10 @@ const http2Transport = {
           socket.setKeepAlive(true, 1000 * 60);
         }
 
-        // Install a single 'error' listener per socket (not per request) to avoid
-        // accumulating listeners on pooled keep-alive sockets that get reassigned
-        // to new requests before the previous request's 'close' fires (issue #10780).
-        // The listener is bound to the socket's currently-active request via a
-        // symbol, which is swapped as the socket is reassigned.
+        // Install one shared 'error' listener per socket. The symbol follows the
+        // currently-active request as pooled sockets are reassigned (issue #10780).
         if (!socket[kAxiosSocketListener]) {
-          socket.on('error', function handleSocketError(err) {
-            const current = socket[kAxiosCurrentReq];
-            if (current && !current.destroyed) {
-              current.destroy(err);
-            }
-          });
+          socket.on('error', handleSocketError);
           socket[kAxiosSocketListener] = true;
         }
 
@@ -42294,7 +42805,7 @@ function mergeConfig(config1, config2) {
     transformResponse: defaultToConfig2,
     paramsSerializer: defaultToConfig2,
     timeout: defaultToConfig2,
-    timeoutMessage: defaultToConfig2,
+    timeoutErrorMessage: defaultToConfig2,
     withCredentials: defaultToConfig2,
     withXSRFToken: defaultToConfig2,
     adapter: defaultToConfig2,
@@ -42409,15 +42920,17 @@ function resolveConfig(config) {
   }
 
   if (utils.isFormData(data)) {
+    const getHeaders = utils.getSafeProp(data, 'getHeaders');
+
     if (
       lib_platform.hasStandardBrowserEnv ||
       lib_platform.hasStandardBrowserWebWorkerEnv ||
       utils.isReactNative(data)
     ) {
       headers.setContentType(undefined); // browser/web worker/RN handles it
-    } else if (utils.isFunction(data.getHeaders)) {
+    } else if (utils.isFunction(getHeaders)) {
       // Node.js FormData (like form-data package)
-      setFormDataHeaders(headers, data.getHeaders(), own('formDataHeaderPolicy'));
+      setFormDataHeaders(headers, getHeaders.call(data), own('formDataHeaderPolicy'));
     }
   }
 
@@ -42463,6 +42976,7 @@ function resolveConfig(config) {
 
 
 
+
 const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
 
 /* harmony default export */ const xhr = (isXHRAdapterSupported &&
@@ -42474,7 +42988,7 @@ const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
       let { responseType, onUploadProgress, onDownloadProgress } = _config;
       let onCanceled;
       let uploadThrottled, downloadThrottled;
-      let flushUpload, flushDownload;
+      let flushUpload, flushDownload, flushDownloadWithEvent;
 
       function done() {
         flushUpload && flushUpload(); // flush events
@@ -42492,10 +43006,55 @@ const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
       // Set the request timeout in MS
       request.timeout = _config.timeout;
 
-      function onloadend() {
+      function onloadend(event) {
         if (!request) {
           return;
         }
+
+        // Status 0 means no response was received, which onerror and onabort normally
+        // reject before this runs. Firefox 152 fires only readystatechange and loadend for
+        // navigation-canceled requests (https://bugzilla.mozilla.org/show_bug.cgi?id=1505389),
+        // leaving settle() to resolve them as an empty success. ECONNABORTED is the error
+        // onabort raised on Firefox 151. Reads over file:, which some environments report as
+        // status 0 on success, are excluded by the request URL's scheme after browser-style
+        // preprocessing, by the page origin's scheme for relative URLs (which inherit it), or
+        // by responseURL where implemented.
+        if (
+          request.status === 0 &&
+          (parseProtocol(normalizeURLForProtocolCheck(_config.url)) ||
+            parseProtocol(lib_platform.origin)) !== 'file' &&
+          !(request.responseURL && request.responseURL.startsWith('file:'))
+        ) {
+          reject(new core_AxiosError('Request aborted', core_AxiosError.ECONNABORTED, config, request));
+          done();
+
+          // Clean up request
+          request = null;
+          return;
+        }
+
+        // When loadend is still dispatching, flushing with it gives progress
+        // listeners a final delivery whose event has a live target. The legacy
+        // ready-state fallback has no event, so replay its pending progress.
+        // A throwing listener must not block settlement; rethrow asynchronously,
+        // matching how listener errors surface on the throttle timer path.
+        try {
+          if (event) {
+            flushDownloadWithEvent && flushDownloadWithEvent(event);
+          } else {
+            flushDownload && flushDownload();
+          }
+        } catch (err) {
+          setTimeout(() => {
+            throw err;
+          });
+        }
+
+        // A final progress callback can cancel the request synchronously.
+        if (!request) {
+          return;
+        }
+
         // Prepare the response
         const responseHeaders = core_AxiosHeaders.from(
           'getAllResponseHeaders' in request && request.getAllResponseHeaders()
@@ -42627,7 +43186,10 @@ const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
 
       // Handle progress if needed
       if (onDownloadProgress) {
-        [downloadThrottled, flushDownload] = progressEventReducer(onDownloadProgress, true);
+        [downloadThrottled, flushDownload, flushDownloadWithEvent] = progressEventReducer(
+          onDownloadProgress,
+          true
+        );
         request.addEventListener('progress', downloadThrottled);
       }
 
@@ -42857,6 +43419,18 @@ const trackStream = (stream, chunkSize, onProgress, onFinish) => {
 
 const DEFAULT_CHUNK_SIZE = 64 * 1024;
 
+const DEFAULT_REQUEST_OPTIONS = {
+  cache: 'default',
+  redirect: 'follow',
+  referrer: 'about:client',
+  referrerPolicy: '',
+  mode: 'cors',
+  integrity: '',
+  keepalive: false,
+  priority: 'auto',
+  window: null,
+};
+
 const { isFunction: fetch_isFunction } = utils;
 
 /**
@@ -42907,9 +43481,7 @@ const maybeWithAuthCredentials = (url) => {
 
 const factory = (env) => {
   const globalObject =
-    utils.global !== undefined && utils.global !== null
-      ? utils.global
-      : globalThis;
+    utils.global !== undefined && utils.global !== null ? utils.global : globalThis;
   const { ReadableStream, TextEncoder } = globalObject;
 
   env = utils.merge.call(
@@ -43048,6 +43620,7 @@ const factory = (env) => {
       fetchOptions,
       maxContentLength,
       maxBodyLength,
+      maxRedirects,
     } = helpers_resolveConfig(config);
 
     const hasMaxContentLength = utils.isNumber(maxContentLength) && maxContentLength > -1;
@@ -43098,7 +43671,7 @@ const factory = (env) => {
         const password = utils.getSafeProp(configAuth, 'password') || '';
         auth = {
           username,
-          password
+          password,
         };
       }
 
@@ -43110,7 +43683,7 @@ const factory = (env) => {
           const urlPassword = fetch_decodeURIComponentSafe(parsedURL.password);
           auth = {
             username: urlUsername,
-            password: urlPassword
+            password: urlPassword,
           };
         }
 
@@ -43184,7 +43757,9 @@ const factory = (env) => {
         (onUploadProgress || mustEnforceStreamBody)
       ) {
         requestContentLength =
-          requestContentLength == null ? await resolveBodyLength(headers, data) : requestContentLength;
+          requestContentLength == null
+            ? await resolveBodyLength(headers, data)
+            : requestContentLength;
 
         // A declared length of 0 is only trusted to skip the wrap when we are
         // not enforcing a stream limit (which must not rely on that header).
@@ -43197,7 +43772,10 @@ const factory = (env) => {
 
           let contentTypeHeader;
 
-          if (utils.isFormData(data) && (contentTypeHeader = _request.headers.get('content-type'))) {
+          if (
+            utils.isFormData(data) &&
+            (contentTypeHeader = _request.headers.get('content-type'))
+          ) {
             headers.setContentType(contentTypeHeader);
           }
 
@@ -43260,20 +43838,57 @@ const factory = (env) => {
       // Set User-Agent header if not already set (fetch defaults to 'node' in Node.js)
       headers.set('User-Agent', 'axios/' + VERSION, false);
 
-      const resolvedOptions = {
-        ...fetchOptions,
+      const safeFetchOptions =
+        fetchOptions == null ? fetchOptions : Object.assign(Object.create(null), fetchOptions);
+
+      if (safeFetchOptions) {
+        // These options are owned by Axios and are already reflected in the
+        // resolved Request passed to fetch.
+        delete safeFetchOptions.body;
+        delete safeFetchOptions.headers;
+        delete safeFetchOptions.method;
+        delete safeFetchOptions.signal;
+        delete safeFetchOptions.duplex;
+        delete safeFetchOptions.credentials;
+      }
+
+      const resolvedOptions = Object.assign(Object.create(null), safeFetchOptions, {
         signal: composedSignal,
         method: method.toUpperCase(),
         headers: toByteStringHeaderObject(headers.normalize()),
         body: data,
         duplex: 'half',
         credentials: isCredentialsSupported ? withCredentials : undefined,
-      };
+      });
+
+      if (isRequestSupported) {
+        utils.forEach(DEFAULT_REQUEST_OPTIONS, (value, key) => {
+          if (resolvedOptions[key] === undefined) {
+            resolvedOptions[key] = value;
+          }
+        });
+
+        if (resolvedOptions.signal === undefined) {
+          resolvedOptions.signal = null;
+        }
+
+        if (resolvedOptions.body === undefined) {
+          resolvedOptions.body = null;
+        }
+      }
+
+      if (maxRedirects === 0) {
+        resolvedOptions.redirect = 'manual';
+
+        if (safeFetchOptions) {
+          safeFetchOptions.redirect = 'manual';
+        }
+      }
 
       request = isRequestSupported && new Request(url, resolvedOptions);
 
       let response = await (isRequestSupported
-        ? _fetch(request, fetchOptions)
+        ? _fetch(request, safeFetchOptions)
         : _fetch(url, resolvedOptions));
 
       const responseHeaders = core_AxiosHeaders.from(response.headers);
@@ -43626,6 +44241,7 @@ function getAdapter(adapters, config) {
 
 
 
+
 /**
  * Throws a `CanceledError` if cancellation has been requested.
  *
@@ -43650,10 +44266,15 @@ function throwIfCancellationRequested(config) {
  *
  * @returns {Promise} The Promise to be fulfilled
  */
-function dispatchRequest(config) {
+function dispatchRequest(_config) {
+  // Interceptors may replace the merged config with an ordinary object. Flatten
+  // it at the dispatch boundary so shared prototype members cannot become
+  // request behavior, while preserving intentional template/class members.
+  const config = utils.toSafeFlatObject(_config);
+
   throwIfCancellationRequested(config);
 
-  config.headers = core_AxiosHeaders.from(config.headers);
+  config.headers = core_AxiosHeaders.from(utils.getSafeProp(config, 'headers'));
 
   // Transform request data
   config.data = transformData.call(config, config.transformRequest);
@@ -43834,6 +44455,7 @@ function assertOptions(options, schema, allowUnknown) {
 
 
 
+
 const Axios_validators = validator.validators;
 
 /**
@@ -43865,21 +44487,21 @@ class Axios {
       return await this._request(configOrUrl, config);
     } catch (err) {
       if (err instanceof Error) {
-        let dummy = {};
+        try {
+          let dummy = {};
 
-        Error.captureStackTrace ? Error.captureStackTrace(dummy) : (dummy = new Error());
+          Error.captureStackTrace ? Error.captureStackTrace(dummy) : (dummy = new Error());
 
-        // slice off the Error: ... line
-        const stack = (() => {
-          if (!dummy.stack) {
-            return '';
+          const dummyStack = dummy.stack;
+          let stack = '';
+
+          // slice off the Error: ... line
+          if (typeof dummyStack === 'string') {
+            const firstNewlineIndex = dummyStack.indexOf('\n');
+
+            stack = firstNewlineIndex === -1 ? '' : dummyStack.slice(firstNewlineIndex + 1);
           }
 
-          const firstNewlineIndex = dummy.stack.indexOf('\n');
-
-          return firstNewlineIndex === -1 ? '' : dummy.stack.slice(firstNewlineIndex + 1);
-        })();
-        try {
           if (!err.stack) {
             err.stack = stack;
             // match without the 2 top stack lines
@@ -43895,7 +44517,7 @@ class Axios {
             }
           }
         } catch (e) {
-          // ignore the case where "stack" is an un-writable property
+          // Ignore failures from custom stack hooks or un-writable stack properties.
         }
       }
 
@@ -43968,13 +44590,17 @@ class Axios {
     );
 
     // Set config.method
-    config.method = (config.method || this.defaults.method || 'get').toLowerCase();
+    config.method = (
+      utils.getSafeProp(config, 'method') ||
+      utils.getSafeProp(this.defaults, 'method') ||
+      'get'
+    ).toLowerCase();
 
     // Flatten headers
     let contextHeaders = headers && utils.merge(headers.common, headers[config.method]);
 
     headers &&
-      utils.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query', 'common'], (method) => {
+      utils.forEach(core_methodList.concat('common'), (method) => {
         delete headers[method];
       });
 
@@ -44345,14 +44971,22 @@ const HttpStatusCode = {
   Gone: 410,
   LengthRequired: 411,
   PreconditionFailed: 412,
+  /**
+   * @deprecated Use `ContentTooLarge` instead.
+   */
   PayloadTooLarge: 413,
+  ContentTooLarge: 413,
   UriTooLong: 414,
   UnsupportedMediaType: 415,
   RangeNotSatisfiable: 416,
   ExpectationFailed: 417,
   ImATeapot: 418,
   MisdirectedRequest: 421,
+  /**
+   * @deprecated Use `UnprocessableContent` instead.
+   */
   UnprocessableEntity: 422,
+  UnprocessableContent: 422,
   Locked: 423,
   FailedDependency: 424,
   TooEarly: 425,
@@ -44382,7 +45016,9 @@ const HttpStatusCode = {
 };
 
 Object.entries(HttpStatusCode).forEach(([key, value]) => {
-  HttpStatusCode[value] = key;
+  if (HttpStatusCode[value] === undefined) {
+    HttpStatusCode[value] = key;
+  }
 });
 
 /* harmony default export */ const helpers_HttpStatusCode = (HttpStatusCode);
