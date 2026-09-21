@@ -1,0 +1,51 @@
+name: rebuild-dist-on-comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rebuild:
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/rebuild') &&
+      github.event.comment.user.login == 'promiseofcake'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get PR branch
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            return pr.data.head.ref;
+          result-encoding: string
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.result }}
+          token: ${{ secrets.GH_PAT }}
+      - name: Configure git
+        run: |
+          git config user.name "Lucas Kacher"
+          git config user.email "1462322+promiseofcake@users.noreply.github.com"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.x
+      - run: npm ci
+      - run: npm run prepare
+      - name: Push if changed
+        run: |
+          if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
+            git add dist/
+            git commit -m "rebuild dist"
+            git push
+          else
+            echo "dist/ already up to date"
+          fi
