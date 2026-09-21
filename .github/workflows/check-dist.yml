@@ -11,14 +11,12 @@ on:
 jobs:
   check-dist:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GH_PAT }}
+          persist-credentials: false
       - name: Check for non-doc changes
         id: filter
         uses: dorny/paths-filter@v4
@@ -26,11 +24,6 @@ jobs:
           filters: |
             src:
               - '!**.md'
-      - name: setup git config
-        if: steps.filter.outputs.src == 'true'
-        run: |
-          git config user.name "Lucas Kacher"
-          git config user.email "1462322+promiseofcake@users.noreply.github.com"
       - name: Set Node.js 22.x
         if: steps.filter.outputs.src == 'true'
         uses: actions/setup-node@v7.0.0
@@ -42,13 +35,23 @@ jobs:
       - name: Rebuild the dist/ directory
         if: steps.filter.outputs.src == 'true'
         run: npm run prepare
-      - name: Compare the expected and actual dist/ directories
+      - name: Verify or auto-fix dist/
         if: steps.filter.outputs.src == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
-            git add .
-            git diff
-            git commit -m "rebuild dist"
-            git push
+          if [ -z "$(git diff --ignore-space-at-eol dist/)" ]; then
+            echo "dist/ up to date"
+            exit 0
           fi
-        id: diff
+          if [ -n "$GH_PAT" ] && [ -n "${{ github.head_ref }}" ]; then
+            git config user.name "Lucas Kacher"
+            git config user.email "1462322+promiseofcake@users.noreply.github.com"
+            git add dist/
+            git commit -m "rebuild dist"
+            git push "https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git" HEAD:"${{ github.head_ref }}"
+          else
+            echo "::error::dist/ is out of date. Comment /rebuild on this PR to regenerate and push it."
+            git diff dist/
+            exit 1
+          fi
