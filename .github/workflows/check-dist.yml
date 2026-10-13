@@ -26,7 +26,7 @@ jobs:
               - '!**.md'
       - name: Set Node.js 22.x
         if: steps.filter.outputs.src == 'true'
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 22.x
       - name: Install dependencies

@@ -35,7 +35,7 @@ jobs:
         run: |
           git config user.name "Lucas Kacher"
           git config user.email "1462322+promiseofcake@users.noreply.github.com"
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22.x
       - run: npm ci
